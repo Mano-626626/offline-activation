@@ -1,0 +1,2395 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1">
+<title>Offline Activation</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0B0C10;
+  --bg-2:#101219;
+  --panel:rgba(255,255,255,.055);
+  --panel-strong:rgba(255,255,255,.09);
+  --border:rgba(255,255,255,.09);
+  --border-strong:rgba(255,255,255,.16);
+  --text:#F5F6FA;
+  --text-dim:#9A9CB0;
+  --text-faint:#5E6178;
+  --violet:#7C5CFC;
+  --cyan:#4CD9E8;
+  --gold:#FFB020;
+  --green:#34D399;
+  --red:#FF6B6B;
+  --radius-lg:26px;
+  --radius-md:18px;
+  --radius-sm:12px;
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+body.light-theme{
+  --bg:#F4F5F8;
+  --bg-2:#EAEBF0;
+  --panel:rgba(11,12,16,.045);
+  --panel-strong:rgba(11,12,16,.075);
+  --border:rgba(11,12,16,.10);
+  --border-strong:rgba(11,12,16,.18);
+  --text:#14151C;
+  --text-dim:#5B5D6B;
+  --text-faint:#9295A3;
+}
+body.light-theme .blob{ opacity:.5; }
+body.light-theme .tabbar{ background:rgba(244,245,248,.72); }
+body.light-theme .topbar{ background:linear-gradient(180deg, rgba(244,245,248,.92), rgba(244,245,248,.55) 70%, transparent); }
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+/* Safety net: inline SVGs without their own width/height can render as
+   invisible or oddly-sized in some mobile WebViews (including Telegram's).
+   This gives every icon a sane default; anything with its own more specific
+   sizing rule (.tab svg, .quick-toggle svg, etc.) still overrides this. */
+svg{width:20px; height:20px; flex-shrink:0; display:inline-block;}
+html,body{height:100%;}
+body{
+  margin:0;
+  background:var(--bg);
+  color:var(--text);
+  font-family:'Inter',sans-serif;
+  -webkit-font-smoothing:antialiased;
+  overflow-x:hidden;
+}
+h1,h2,h3,.display{font-family:'Space Grotesk',sans-serif; letter-spacing:-.02em;}
+.mono{font-family:'JetBrains Mono',monospace;}
+#app{max-width:520px; margin:0 auto; min-height:100vh; position:relative; z-index:1; padding-bottom:calc(100px + var(--safe-bottom));}
+
+/* ---------- animated background blobs ---------- */
+#bg-blobs{position:fixed; inset:0; overflow:hidden; z-index:0; pointer-events:none;}
+.blob{position:absolute; border-radius:50%; filter:blur(60px); will-change:transform; mix-blend-mode:screen;}
+.blob-1{width:46vh; height:46vh; max-width:420px; max-height:420px; top:-8%; left:-12%;
+  background:radial-gradient(circle, rgba(124,92,252,.55), rgba(124,92,252,0) 70%);
+  animation:blobFloat1 38s ease-in-out infinite;}
+.blob-2{width:42vh; height:42vh; max-width:380px; max-height:380px; top:38%; right:-16%;
+  background:radial-gradient(circle, rgba(76,217,232,.5), rgba(76,217,232,0) 70%);
+  animation:blobFloat2 44s ease-in-out infinite;}
+.blob-3{width:40vh; height:40vh; max-width:360px; max-height:360px; bottom:-12%; left:12%;
+  background:radial-gradient(circle, rgba(255,138,216,.45), rgba(255,138,216,0) 70%);
+  animation:blobFloat3 50s ease-in-out infinite;}
+.blob-4{width:34vh; height:34vh; max-width:320px; max-height:320px; bottom:14%; right:6%;
+  background:radial-gradient(circle, rgba(92,124,252,.5), rgba(92,124,252,0) 70%);
+  animation:blobFloat4 41s ease-in-out infinite;}
+@keyframes blobFloat1{
+  0%,100%{transform:translate(0,0) scale(1);}
+  25%{transform:translate(8vw,10vh) scale(1.12);}
+  50%{transform:translate(2vw,18vh) scale(0.94);}
+  75%{transform:translate(-6vw,6vh) scale(1.05);}
+}
+@keyframes blobFloat2{
+  0%,100%{transform:translate(0,0) scale(1);}
+  30%{transform:translate(-9vw,-6vh) scale(1.08);}
+  60%{transform:translate(-3vw,10vh) scale(0.92);}
+  85%{transform:translate(4vw,4vh) scale(1.04);}
+}
+@keyframes blobFloat3{
+  0%,100%{transform:translate(0,0) scale(1);}
+  20%{transform:translate(7vw,-8vh) scale(0.95);}
+  55%{transform:translate(-5vw,-14vh) scale(1.1);}
+  80%{transform:translate(3vw,-4vh) scale(1);}
+}
+@keyframes blobFloat4{
+  0%,100%{transform:translate(0,0) scale(1);}
+  35%{transform:translate(-6vw,8vh) scale(1.1);}
+  65%{transform:translate(5vw,3vh) scale(0.9);}
+}
+@media (prefers-reduced-motion: reduce){
+  .blob{animation:none !important;}
+}
+::-webkit-scrollbar{display:none;}
+
+/* ---------- glass ---------- */
+.glass{
+  background:var(--panel);
+  backdrop-filter:blur(22px) saturate(160%);
+  -webkit-backdrop-filter:blur(22px) saturate(160%);
+  border:1px solid var(--border);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07), inset 0 0 24px rgba(124,92,252,.04), 0 10px 26px rgba(0,0,0,.16);
+}
+.glass-strong{
+  background:var(--panel-strong);
+  backdrop-filter:blur(26px) saturate(180%);
+  -webkit-backdrop-filter:blur(26px) saturate(180%);
+  border:1px solid var(--border-strong);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.09), inset 0 0 30px rgba(124,92,252,.05), 0 12px 30px rgba(0,0,0,.2);
+}
+
+/* ---------- top bar ---------- */
+.topbar{
+  position:sticky; top:0; z-index:40;
+  padding:calc(14px + var(--safe-top)) 18px 12px;
+  display:flex; align-items:center; justify-content:space-between; gap:10px;
+  background:linear-gradient(180deg, rgba(11,12,16,.92), rgba(11,12,16,.55) 70%, transparent);
+}
+.brand{display:flex; align-items:center; gap:10px;}
+.brand-mark{
+  width:34px; height:34px; border-radius:10px;
+  background:conic-gradient(from 210deg, var(--violet), var(--cyan), var(--violet));
+  display:flex; align-items:center; justify-content:center;
+  font-family:'Space Grotesk'; font-weight:700; font-size:15px; color:#0B0C10;
+  box-shadow:0 4px 18px rgba(124,92,252,.35);
+}
+.brand-name{font-size:14px; font-weight:600; line-height:1.15; max-width:88px; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;}
+.brand-name span{overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.brand-name span{display:block; font-size:10.5px; color:var(--text-dim); font-weight:500; letter-spacing:.04em;}
+.icon-btn{
+  width:38px; height:38px; border-radius:12px; display:flex; align-items:center; justify-content:center;
+  border:1px solid var(--border); background:var(--panel); color:var(--text); cursor:pointer;
+  transition:transform .15s ease, background .15s ease;
+}
+.icon-btn:active{transform:scale(.9); background:var(--panel-strong);}
+.quickbar{
+  display:flex; gap:7px; padding:2px 18px 12px; overflow-x:auto; scroll-snap-type:x proximity;
+}
+.quick-toggle{
+  display:flex; align-items:center; gap:3px; height:32px; padding:0 8px; border-radius:10px;
+  border:1px solid var(--border-strong); background:var(--panel-strong); color:var(--text); cursor:pointer;
+  font-size:11px; font-weight:700; transition:transform .15s ease; white-space:nowrap; flex:0 0 auto;
+}
+.quick-toggle:active{transform:scale(.92);}
+.quick-toggle svg{width:12px; height:12px; flex:0 0 auto;}
+.quick-balance{
+  border-color:rgba(255,176,32,.4); background:rgba(255,176,32,.1); color:var(--gold);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.08);
+}
+
+/* ---------- screens ---------- */
+.screen{display:none; animation:fadeUp .35s cubic-bezier(.2,.8,.2,1);}
+.screen.active{display:block;}
+@keyframes fadeUp{from{opacity:0; transform:translateY(10px);} to{opacity:1; transform:translateY(0);}}
+
+.section{padding:6px 18px 22px;}
+.section-head{display:flex; align-items:center; justify-content:space-between; margin:0 0 12px;}
+.section-title{font-size:17px; font-weight:600; margin:0;}
+.section-link{font-size:12.5px; color:var(--cyan); font-weight:600; cursor:pointer;}
+
+/* ---------- search ---------- */
+.search-wrap{padding:0 18px 12px;}
+.search-bar{
+  display:flex; align-items:center; gap:8px; padding:0 12px; height:36px;
+  border-radius:11px; background:rgba(255,255,255,.05); border:1px solid var(--border);
+}
+.search-bar svg{width:15px; height:15px; flex:0 0 auto; opacity:.55;}
+.search-bar input{
+  flex:1; min-width:0; background:none; border:none; outline:none; color:var(--text); font-size:13px; font-family:'Inter';
+}
+.search-bar input::placeholder{color:var(--text-faint);}
+
+/* ---------- banner ---------- */
+.hero{
+  margin:0 18px 20px; border-radius:var(--radius-lg); padding:22px;
+  position:relative; overflow:hidden; min-height:150px;
+  background:linear-gradient(135deg, rgba(124,92,252,.35), rgba(76,217,232,.18));
+  border:1px solid var(--border-strong);
+}
+.hero::after{
+  content:''; position:absolute; inset:0;
+  background:radial-gradient(220px 220px at 90% 10%, rgba(255,255,255,.18), transparent 60%);
+}
+.hero-tag{
+  display:inline-block; font-size:10.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase;
+  padding:5px 10px; border-radius:20px; background:rgba(11,12,16,.4); border:1px solid rgba(255,255,255,.2);
+  margin-bottom:10px;
+}
+.hero h2{font-size:22px; margin:0 0 6px; position:relative; z-index:1;}
+.hero p{font-size:12.5px; color:rgba(245,246,250,.85); margin:0 0 16px; max-width:78%; position:relative;}
+.hero-btn{
+  display:inline-flex; align-items:center; gap:6px; background:#F5F6FA; color:#0B0C10; border:none;
+  padding:10px 16px; border-radius:999px; font-weight:700; font-size:12.5px; cursor:pointer; position:relative;
+}
+
+/* ---------- categories chips ---------- */
+.chip-row{display:flex; gap:9px; overflow-x:auto; padding:0 18px 4px; scroll-snap-type:x proximity;}
+.chip{
+  flex:0 0 auto; padding:9px 15px; border-radius:999px; font-size:12.5px; font-weight:600; color:var(--text-dim);
+  cursor:pointer; transition:all .15s ease; white-space:nowrap; scroll-snap-align:start;
+}
+.chip.active{color:#0B0C10; background:linear-gradient(135deg,var(--violet),var(--cyan)); border-color:transparent;}
+
+/* ---------- game card grid ---------- */
+.grid{display:grid; grid-template-columns:repeat(2,1fr); gap:13px; padding:0 18px;}
+.rail{display:flex; gap:13px; overflow-x:auto; padding:2px 18px 10px;}
+.rail .card{flex:0 0 148px;}
+
+.card{
+  border-radius:var(--radius-md); overflow:hidden; cursor:pointer;
+  transition:transform .32s cubic-bezier(.22,.85,.32,1.15), box-shadow .32s ease;
+  position:relative;
+}
+.card:active{
+  transform:translateY(-3px) scale(1.03);
+  box-shadow:0 16px 34px rgba(124,92,252,.32), 0 4px 14px rgba(0,0,0,.25);
+}
+@media (hover:hover){
+  .card:hover{
+    transform:translateY(-3px) scale(1.03);
+    box-shadow:0 16px 34px rgba(124,92,252,.28), 0 4px 14px rgba(0,0,0,.22);
+  }
+}
+.cover{
+  position:relative; aspect-ratio:3/4; border-radius:var(--radius-md); overflow:hidden;
+  display:flex; align-items:flex-end; padding:10px;
+}
+.cover::before{content:''; position:absolute; inset:0; background:linear-gradient(180deg, transparent 40%, rgba(0,0,0,.55) 100%);}
+.cover-title{position:relative; z-index:1; font-family:'Space Grotesk'; font-weight:600; font-size:12.5px; line-height:1.2; color:#fff; text-shadow:0 2px 8px rgba(0,0,0,.4);}
+.seal{
+  position:absolute; top:8px; right:8px; width:22px; height:22px; border-radius:50%; z-index:2;
+  background:conic-gradient(from var(--seal-a,0deg), #ff9ad5, #7C5CFC, #4CD9E8, #ffe27a, #ff9ad5);
+  box-shadow:0 0 0 2px rgba(255,255,255,.35) inset, 0 2px 6px rgba(0,0,0,.4);
+}
+.badge{
+  position:absolute; top:8px; left:8px; z-index:2; font-size:9.5px; font-weight:700; letter-spacing:.03em;
+  padding:3px 7px; border-radius:6px; text-transform:uppercase;
+}
+.badge.sale{background:var(--gold); color:#211500;}
+.badge.new{background:var(--cyan); color:#012027;}
+.badge.hot{background:var(--violet); color:#fff;}
+.meta{padding:9px 3px 2px;}
+.meta .g-title{font-size:12.5px; font-weight:600; margin:0 0 3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.meta .g-genre{font-size:10.5px; color:var(--text-faint); margin:0 0 6px;}
+.price-row{display:flex; align-items:center; gap:6px;}
+.price{font-family:'JetBrains Mono'; font-weight:600; font-size:13px; color:var(--text);}
+.price.sale{color:var(--gold);}
+.price-old{font-family:'JetBrains Mono'; font-size:10.5px; color:var(--text-faint); text-decoration:line-through;}
+.stars{font-size:10px; color:var(--gold); display:flex; align-items:center; gap:3px; margin-left:auto;}
+
+/* ---------- bottom nav ---------- */
+.tabbar{
+  position:fixed; left:14px; right:14px; bottom:calc(14px + var(--safe-bottom)); z-index:50; max-width:492px; margin:0 auto;
+  padding:14px 16px;
+  min-height:74px;
+  display:flex; justify-content:space-around; align-items:center;
+  background:rgba(22,23,30,.6); backdrop-filter:blur(36px) saturate(200%); -webkit-backdrop-filter:blur(36px) saturate(200%);
+  border:1px solid rgba(255,255,255,.16);
+  border-radius:32px;
+  box-shadow:0 12px 36px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.14), inset 0 0 24px rgba(124,92,252,.06);
+}
+.tab{
+  display:flex; flex-direction:column; align-items:center; gap:3px; color:var(--text-faint); cursor:pointer;
+  position:relative; padding:6px 12px; overflow:visible; opacity:.8;
+  transform:translateY(0) scale(1);
+  transition:color .28s ease, opacity .28s ease, transform .28s cubic-bezier(.25,.8,.3,1.15);
+}
+.tab.active{ color:var(--text); opacity:1; transform:translateY(-3px) scale(1.09); background:rgba(255,255,255,.1); border-radius:18px; box-shadow:inset 0 1px 0 rgba(255,255,255,.12); }
+.tab:active{ transform:scale(.95); transition-duration:.13s; }
+.tab.active:active{ transform:translateY(-3px) scale(1.02); }
+.tab svg{width:22px; height:22px; position:relative; z-index:1; transition:transform .28s cubic-bezier(.25,.8,.3,1.15); filter:drop-shadow(0 1px 3px rgba(0,0,0,.5));}
+.tab.active svg{ transform:translateY(-2px); }
+.tab span{font-size:9.5px; font-weight:700; position:relative; z-index:1; text-shadow:0 1px 4px rgba(0,0,0,.6);}
+.tab .dot{position:absolute; top:2px; right:6px; width:7px; height:7px; border-radius:50%; background:var(--gold); border:1.5px solid var(--bg); z-index:2;}
+.tab-bubble{
+  position:absolute; top:0; left:50%; width:42px; height:42px; border-radius:50%; z-index:0;
+  background:radial-gradient(circle, rgba(124,92,252,.38), rgba(76,217,232,.16) 60%, transparent 78%);
+  transform:translateX(-50%) scale(.4); opacity:0;
+  animation:bubblePop .45s cubic-bezier(.22,1.4,.4,1) forwards;
+}
+@keyframes bubblePop{
+  0%{transform:translateX(-50%) scale(.4); opacity:0;}
+  55%{transform:translateX(-50%) scale(1.1); opacity:1;}
+  100%{transform:translateX(-50%) scale(1); opacity:.9;}
+}
+.tab-ripple{
+  position:absolute; border-radius:50%; z-index:0; pointer-events:none;
+  background:radial-gradient(circle, rgba(124,92,252,.45), transparent 70%);
+  transform:translate(-50%,-50%) scale(0); opacity:.7;
+  animation:rippleOut .6s ease-out forwards;
+}
+@keyframes rippleOut{
+  to{ transform:translate(-50%,-50%) scale(2.8); opacity:0; }
+}
+
+.tab-pay{ padding:0 6px; margin-top:-24px; justify-content:flex-start; cursor:pointer; opacity:1; }
+.pay-btn{
+  width:56px; height:56px; border-radius:50%;
+  background:linear-gradient(135deg, var(--violet), #4C6FFC 65%, var(--cyan));
+  display:flex; align-items:center; justify-content:center;
+  color:#fff; font-family:'Space Grotesk'; font-weight:700; font-size:11.5px; letter-spacing:.06em;
+  border:1px solid rgba(255,255,255,.22);
+  box-shadow:0 0 0 6px rgba(9,10,14,.65), 0 8px 20px rgba(124,92,252,.4), 0 0 20px rgba(124,92,252,.35);
+  transition:transform .18s cubic-bezier(.2,.8,.2,1);
+  animation:payBreathe 2.6s ease-in-out infinite, payGlow 2.6s ease-in-out infinite;
+}
+.tab-pay:active .pay-btn{ transform:scale(.86); animation-play-state:paused; }
+@keyframes payBreathe{
+  0%,100%{ transform:scale(1); }
+  50%{ transform:scale(1.03); }
+}
+@keyframes payGlow{
+  0%,100%{ box-shadow:0 0 0 6px rgba(9,10,14,.65), 0 8px 20px rgba(124,92,252,.35), 0 0 16px rgba(124,92,252,.3); }
+  50%{ box-shadow:0 0 0 6px rgba(9,10,14,.65), 0 10px 28px rgba(124,92,252,.6), 0 0 34px rgba(124,92,252,.55); }
+}
+@media (prefers-reduced-motion: reduce){
+  .pay-btn{ animation:none !important; }
+}
+
+.support-btn{
+  display:flex; align-items:center; justify-content:center; gap:10px;
+  width:100%; padding:16px 18px; border-radius:18px; cursor:pointer; border:1px solid rgba(255,255,255,.22);
+  background:linear-gradient(135deg, var(--violet), #4C6FFC 65%, var(--cyan));
+  color:#fff; font-weight:700; font-size:14px; font-family:'Space Grotesk';
+  transition:transform .18s cubic-bezier(.2,.8,.2,1);
+  animation:supportBreathe 3.8s ease-in-out infinite, supportGlow 3.8s ease-in-out infinite;
+}
+.support-btn svg{width:20px; height:20px; flex:0 0 auto;}
+.support-btn:active{ transform:scale(.96); animation-play-state:paused; }
+@keyframes supportBreathe{
+  0%,100%{ transform:scale(1); }
+  50%{ transform:scale(1.015); }
+}
+@keyframes supportGlow{
+  0%,100%{ box-shadow:0 8px 20px rgba(124,92,252,.3), 0 0 16px rgba(124,92,252,.22); }
+  50%{ box-shadow:0 10px 32px rgba(124,92,252,.58), 0 0 38px rgba(124,92,252,.5); }
+}
+@media (prefers-reduced-motion: reduce){
+  .support-btn{ animation:none !important; }
+}
+
+/* ---------- buttons ---------- */
+.btn{
+  border:none; border-radius:14px; padding:14px 18px; font-weight:700; font-size:14px; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; gap:8px; transition:transform .15s ease, opacity .15s ease; width:100%;
+}
+.btn:active{transform:scale(.97);}
+.btn-primary{background:linear-gradient(135deg,var(--violet),#5a3fe0); color:#fff; box-shadow:0 8px 24px rgba(124,92,252,.3);}
+.btn-ghost{background:var(--panel); border:1px solid var(--border); color:var(--text);}
+.btn-light{background:#F5F6FA; color:#0B0C10;}
+.btn-danger{background:rgba(255,107,107,.12); color:var(--red); border:1px solid rgba(255,107,107,.3);}
+.btn-sm{padding:9px 14px; font-size:12.5px; border-radius:11px; width:auto;}
+.btn:disabled{opacity:.5;}
+
+/* ---------- detail screen ---------- */
+.detail-cover{
+  margin:0 18px; border-radius:var(--radius-lg); aspect-ratio:16/10; position:relative; overflow:hidden;
+  display:flex; align-items:flex-end; padding:20px; border:1px solid var(--border-strong);
+}
+.detail-cover::before{content:''; position:absolute; inset:0; background:linear-gradient(180deg, transparent 20%, rgba(0,0,0,.6) 100%);}
+.detail-cover h1{position:relative; z-index:1; font-size:24px; margin:0 0 4px; color:#fff;}
+.pill-row{display:flex; gap:8px; flex-wrap:wrap; padding:16px 18px 4px;}
+.pill{font-size:11px; font-weight:600; padding:6px 11px; border-radius:999px; color:var(--text-dim);}
+.desc{padding:14px 18px; font-size:13.5px; line-height:1.65; color:var(--text-dim);}
+.stat-row{display:flex; gap:10px; padding:4px 18px 6px;}
+.stat-box{flex:1; border-radius:var(--radius-sm); padding:12px; text-align:center;}
+.stat-box b{display:block; font-size:16px; font-family:'Space Grotesk';}
+.stat-box span{font-size:9.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.04em;}
+.sticky-buy{
+  position:sticky; bottom:0; padding:14px 18px calc(14px + var(--safe-bottom)); display:flex; gap:10px;
+  background:linear-gradient(180deg, transparent, rgba(11,12,16,.9) 30%);
+  margin-top:10px;
+}
+
+/* ---------- lists ---------- */
+.list-row{
+  display:flex; align-items:center; gap:12px; padding:13px 14px; border-radius:var(--radius-md); margin-bottom:10px; cursor:pointer;
+}
+.list-row .thumb{width:46px; height:46px; border-radius:11px; flex:0 0 auto; display:flex; align-items:center; justify-content:center; font-family:'Space Grotesk'; font-weight:700; font-size:13px;}
+.list-row .info{flex:1; min-width:0;}
+.list-row .info b{display:block; font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+.list-row .info span{font-size:11.5px; color:var(--text-faint);}
+.qty-ctrl{display:flex; align-items:center; gap:8px;}
+.qty-ctrl button{width:26px; height:26px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); font-size:14px; cursor:pointer;}
+
+/* ---------- profile ---------- */
+.profile-head{display:flex; align-items:center; gap:14px; padding:6px 18px 18px;}
+.avatar{width:64px; height:64px; border-radius:20px; background:conic-gradient(from 140deg,var(--violet),var(--cyan)); display:flex; align-items:center; justify-content:center; font-family:'Space Grotesk'; font-weight:700; font-size:22px; color:#0B0C10;}
+.profile-name{font-size:17px; font-weight:600; margin:0 0 3px;}
+.profile-sub{font-size:12px; color:var(--text-faint);}
+.ref-card{margin:0 18px 18px; border-radius:var(--radius-lg); padding:18px; background:linear-gradient(135deg, rgba(124,92,252,.28), rgba(76,217,232,.16)); border:1px solid var(--border-strong); cursor:pointer; transition:transform .15s ease;}
+.ref-card:active{transform:scale(.98);}
+.menu-row{display:flex; align-items:center; gap:12px; padding:14px 16px; border-radius:var(--radius-md); margin-bottom:9px; cursor:pointer;}
+.menu-row .ic{width:34px; height:34px; border-radius:10px; display:flex; align-items:center; justify-content:center; background:var(--panel-strong);}
+.menu-row b{font-size:13.5px; font-weight:600; flex:1;}
+.menu-row .chev{color:var(--text-faint);}
+
+/* ---------- toast ---------- */
+.toast{
+  position:fixed; left:50%; bottom:100px; transform:translateX(-50%) translateY(20px); z-index:100;
+  padding:12px 18px; border-radius:14px; font-size:13px; font-weight:600; display:flex; align-items:center; gap:8px;
+  opacity:0; transition:all .3s cubic-bezier(.2,.8,.2,1); pointer-events:none; max-width:88%;
+  background:rgba(20,22,30,.92); backdrop-filter:blur(20px); border:1px solid var(--border-strong);
+}
+.toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+/* ---------- modal / sheet ---------- */
+.overlay{position:fixed; inset:0; background:rgba(0,0,0,.55); z-index:80; opacity:0; pointer-events:none; transition:opacity .25s ease;}
+.overlay.show{opacity:1; pointer-events:auto;}
+.sheet{
+  position:fixed; left:0; right:0; bottom:0; z-index:90; max-width:520px; margin:0 auto;
+  background:#14151c; border-radius:26px 26px 0 0; border:1px solid var(--border-strong); border-bottom:none;
+  padding:20px 18px calc(22px + var(--safe-bottom)); transform:translateY(100%); transition:transform .32s cubic-bezier(.2,.8,.2,1);
+  max-height:82vh; overflow-y:auto;
+}
+.sheet.show{transform:translateY(0);}
+.sheet-handle{width:38px; height:4px; border-radius:3px; background:var(--border-strong); margin:0 auto 16px;}
+
+/* ---------- checkout / loading ---------- */
+.center-screen{display:flex; flex-direction:column; align-items:center; justify-content:center; text-align:center; padding:60px 30px; min-height:70vh; position:relative;}
+.spinner{width:56px; height:56px; border-radius:50%; border:3px solid var(--border); border-top-color:var(--violet); animation:spin 1s linear infinite; margin-bottom:22px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+
+.success-screen{position:relative; overflow:hidden;}
+.success-screen::after{
+  content:''; position:fixed; inset:0; z-index:-1; pointer-events:none;
+  background:radial-gradient(circle at 50% 28%, transparent 0%, rgba(0,0,0,.4) 100%);
+  opacity:0; animation:dimIn 1s ease forwards;
+}
+@keyframes dimIn{ to{ opacity:1; } }
+.success-glow{
+  position:absolute; top:18%; left:50%; width:280px; height:280px; transform:translateX(-50%);
+  background:radial-gradient(circle, rgba(124,92,252,.35), rgba(76,217,232,.12) 55%, transparent 75%);
+  filter:blur(30px); border-radius:50%; z-index:0;
+  animation:glowIn 1.4s ease forwards;
+  opacity:0;
+}
+@keyframes glowIn{ 0%{opacity:0; transform:translateX(-50%) scale(.7);} 100%{opacity:1; transform:translateX(-50%) scale(1);} }
+.success-particles{position:absolute; inset:0; z-index:0; pointer-events:none;}
+.spark{
+  position:absolute; bottom:32%; left:var(--sx); font-size:var(--ssize); opacity:0;
+  animation:sparkFloat 1.8s ease-out forwards;
+  animation-delay:var(--sdelay);
+  filter:drop-shadow(0 0 6px rgba(255,209,102,.7));
+}
+@keyframes sparkFloat{
+  0%{opacity:0; transform:translateY(0) scale(.4) rotate(0deg);}
+  15%{opacity:1;}
+  100%{opacity:0; transform:translateY(-160px) scale(1) rotate(30deg);}
+}
+.check-circle{
+  width:78px; height:78px; border-radius:50%; background:linear-gradient(135deg,var(--green),#1fae7a); display:flex; align-items:center;
+  justify-content:center; margin-bottom:20px; box-shadow:0 10px 30px rgba(52,211,153,.35); position:relative; z-index:1;
+  opacity:0; animation:pop .55s cubic-bezier(.2,1.4,.4,1) .5s forwards;
+}
+@keyframes pop{0%{transform:scale(0); opacity:0;} 70%{transform:scale(1.1);} 100%{transform:scale(1); opacity:1;}}
+.fade-up-in{opacity:0; transform:translateY(10px); animation:fadeUpIn .5s cubic-bezier(.2,.8,.2,1) forwards; position:relative; z-index:1;}
+@keyframes fadeUpIn{ to{ opacity:1; transform:translateY(0); } }
+
+/* ---------- inputs ---------- */
+.field{margin-bottom:14px;}
+.field label{display:block; font-size:11.5px; color:var(--text-faint); margin-bottom:6px; font-weight:600; text-transform:uppercase; letter-spacing:.03em;}
+.field input, .field textarea, .field select{
+  width:100%; padding:12px 13px; border-radius:12px; border:1px solid var(--border); background:var(--panel);
+  color:var(--text); font-size:13.5px; font-family:'Inter'; outline:none;
+}
+.field textarea{resize:vertical; min-height:64px;}
+.field input:focus, .field textarea:focus{border-color:var(--violet);}
+
+/* ---------- admin ---------- */
+.admin-tabs{display:flex; gap:8px; padding:0 18px 14px; overflow-x:auto;}
+.stat-grid{display:grid; grid-template-columns:1fr 1fr; gap:12px; padding:0 18px 18px;}
+.stat-card{border-radius:var(--radius-md); padding:16px;}
+.stat-card b{display:block; font-size:22px; font-family:'Space Grotesk'; margin-bottom:2px;}
+.stat-card span{font-size:11px; color:var(--text-faint);}
+.bar-chart{display:flex; align-items:flex-end; gap:6px; height:90px; padding:0 18px 20px;}
+.bar-chart .bar{flex:1; border-radius:6px 6px 2px 2px; background:linear-gradient(180deg,var(--cyan),var(--violet)); min-height:6px;}
+.admin-row{display:flex; align-items:center; gap:10px; padding:11px 12px; border-radius:var(--radius-sm); margin-bottom:8px;}
+.admin-row input{width:64px; padding:7px 8px; border-radius:8px; border:1px solid var(--border); background:var(--bg-2); color:var(--text); font-size:12px; font-family:'JetBrains Mono';}
+.tiny-btn{width:28px; height:28px; border-radius:8px; border:1px solid var(--border); background:var(--panel); color:var(--text); cursor:pointer; font-size:13px; display:flex; align-items:center; justify-content:center;}
+
+.empty{text-align:center; padding:50px 20px; color:var(--text-faint); font-size:13px;}
+.divider{height:1px; background:var(--border); margin:16px 18px;}
+.fav-heart{position:absolute; bottom:8px; right:8px; z-index:2; width:26px; height:26px; border-radius:50%; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,.4); backdrop-filter:blur(6px);}
+</style>
+</head>
+<body>
+<div id="bg-blobs" aria-hidden="true">
+  <div class="blob blob-1"></div>
+  <div class="blob blob-2"></div>
+  <div class="blob blob-3"></div>
+  <div class="blob blob-4"></div>
+</div>
+<div id="app"></div>
+<div class="toast" id="toast"></div>
+<div class="overlay" id="overlay"></div>
+<div class="sheet" id="sheet"></div>
+
+<script>
+/* =========================================================================
+   OFFLINE ACTIVATION — Telegram Mini App prototype
+   Single-file, framework-free implementation. In-memory state only
+   (no localStorage — not available in this sandbox; a real deployment
+   would persist via the backend described in ARCHITECTURE NOTES below).
+
+   ARCHITECTURE NOTES (for future backend integration)
+   -----------------------------------------------------------------------
+   - api.* functions below are the ONLY place that "talk" to a backend.
+     Right now they resolve instantly with mock data. Swap their internals
+     for real fetch() calls to your server and nothing else in the app
+     needs to change.
+   - auth.telegramLogin() reads Telegram.WebApp.initDataUnsafe when running
+     inside Telegram, and falls back to a mock user otherwise. On a real
+     server you'd send window.Telegram.WebApp.initData to your backend and
+     verify the hash server-side (per Telegram Mini Apps docs) instead of
+     trusting initDataUnsafe on the client.
+   - payments.pay() is a stub. To wire up Telegram Stars: call
+     Telegram.WebApp.openInvoice(invoiceUrl) with an invoice link created
+     server-side via the Bot API `createInvoiceLink` (currency "XTR" for
+     Stars), then listen to the invoiceClosed event. To support another
+     provider, add a new function with the same (order) -> Promise<result>
+     signature and swap it in CONFIG.paymentProvider.
+   ========================================================================= */
+
+const CONFIG = {
+  storeName: "Offline Activation",
+  botUsername: "OffActivationbot",
+  // Real vs. simulated payments are now auto-detected at runtime (see
+  // isRealPaymentsAvailable() below) — this flag is just informational.
+  paymentProvider: "mock",                  // "mock" | "telegram_stars" | "other"
+  // Point this at your deployed backend (see /backend/README.md for how to
+  // build + deploy it). Real Telegram Stars payments stay OFF until this is
+  // changed from the placeholder below AND the app is opened inside real Telegram.
+  apiBaseUrl: "https://offline-activation-backend.onrender.com", // real deployed backend
+  // Only these two Telegram accounts can see and use the Admin panel.
+  // Usernames are matched case-insensitively, without the "@".
+  // NOTE: Telegram usernames can be changed by their owner at any time, and
+  // Telegram only includes the username in initDataUnsafe if the person has
+  // one set — so for a real production launch, switch to numeric Telegram
+  // user IDs instead (ask @userinfobot for yours) via adminTelegramIds below,
+  // and verify them server-side. Both lists are checked; either match grants access.
+  adminUsernames: ["RutuGames", "RutuLljko"],
+  adminTelegramIds: [],
+  referralRewardStars: 50, // flat reward per successful referral (matches REFERRAL_REWARD_STARS on backend)
+  supportTelegramUsername: "RutuGames", // where "Message support" sends people
+};
+function isAdmin(u){
+  if (!u) return false;
+  const uname = (u.username||"").replace(/^@/,"").toLowerCase();
+  const allowed = CONFIG.adminUsernames.map(x=>x.toLowerCase());
+  return allowed.includes(uname) || CONFIG.adminTelegramIds.includes(u.id);
+}
+function openTelegramLink(username){
+  const url = `https://t.me/${username.replace(/^@/,"")}`;
+  try{
+    const tg = window.Telegram && window.Telegram.WebApp;
+    if (tg && tg.openTelegramLink) { tg.openTelegramLink(url); return; }
+  }catch(e){}
+  window.open(url, "_blank");
+}
+// True only when: running inside real Telegram (openInvoice + initData exist)
+// AND apiBaseUrl has been pointed at a real deployed backend (not the placeholder).
+// See backend/README.md for how to deploy the backend and fill this in.
+function isRealPaymentsAvailable(){
+  try{
+    const tg = window.Telegram && window.Telegram.WebApp;
+    const backendConfigured = CONFIG.apiBaseUrl && !CONFIG.apiBaseUrl.includes("api.offlineactivation.example");
+    return !!(tg && typeof tg.openInvoice === "function" && tg.initData && backendConfigured);
+  }catch(e){ return false; }
+}
+// Catalog sync doesn't need real Telegram (it's a public read), just a deployed
+// backend — this lets admin-added games show up even when previewing in a
+// plain browser, not only inside Telegram.
+function isBackendConfigured(){
+  return !!(CONFIG.apiBaseUrl && !CONFIG.apiBaseUrl.includes("api.offlineactivation.example"));
+}
+
+// Pulls the live catalog from the backend and merges it into the local GAMES
+// array: updates matching games in place (title/genre/price/desc/image),
+// adds any admin-created games not yet known locally, and removes games the
+// admin deleted. Decorative-only fields (hue, isNew, sold, discount) are
+// generated locally and left alone for existing games.
+async function syncCatalogFromBackend(){
+  if (!isBackendConfigured()) return;
+  try{
+    const res = await fetch(`${CONFIG.apiBaseUrl}/api/catalog`);
+    if (!res.ok) return;
+    const { games: remoteGames } = await res.json();
+    if (!Array.isArray(remoteGames)) return;
+    if (remoteGames.length === 0) {
+      // A genuinely empty backend catalog almost always means the server's
+      // data/catalog.json is missing or broken, not "the admin deleted every
+      // game". Never let that wipe out the app's built-in catalog — bail out
+      // instead so the person notices the real problem (check /api/catalog
+      // on the backend directly) rather than seeing an empty store.
+      console.error("syncCatalogFromBackend: backend returned 0 games — skipping sync to avoid wiping the local catalog. Check data/catalog.json on the server.");
+      return;
+    }
+
+    const remoteIds = new Set(remoteGames.map(g=>g.id));
+    // Remove locally-known games the admin deleted server-side.
+    for (let i=GAMES.length-1; i>=0; i--){
+      if (!remoteIds.has(GAMES[i].id)) GAMES.splice(i,1);
+    }
+    // Update existing / add new games.
+    remoteGames.forEach(rg=>{
+      const local = GAMES.find(g=>g.id===rg.id);
+      if (local){
+        local.title = rg.title; local.genre = rg.genre; local.price = rg.priceUsd;
+        local.desc = rg.desc || local.desc; local.rating = rg.rating || local.rating;
+        local.imageUrl = rg.imageUrl || null;
+      } else {
+        GAMES.push({
+          id: rg.id, title: rg.title, genre: rg.genre, price: rg.priceUsd,
+          orig: null, discountPct: 0, desc: rg.desc || "", rating: rg.rating || 4.5,
+          isNew: true, isHot: false,
+          hue: Math.floor(rnd()*360), hue2: Math.floor(rnd()*360),
+          sold: 0, imageUrl: rg.imageUrl || null,
+        });
+      }
+    });
+    render();
+  }catch(e){ console.error("syncCatalogFromBackend failed:", e); }
+}
+
+// Shared helper for admin panel writes (create/edit/delete game). Attaches
+// initData so the backend can verify the caller is really an admin.
+async function adminApiCall(method, path, body){
+  if (!isBackendConfigured()) {
+    throw new Error(t('toast_backend_not_configured'));
+  }
+  const tg = window.Telegram && window.Telegram.WebApp;
+  const initData = tg ? tg.initData : "";
+  const res = await fetch(`${CONFIG.apiBaseUrl}${path}`, {
+    method,
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({ initData, ...body }),
+  });
+  const data = await res.json().catch(()=>({}));
+  if (!res.ok) throw new Error(data.error || `Server error (${res.status})`);
+  return data;
+}
+
+
+/* ---------------- mock backend layer ---------------- */
+const api = {
+  async fetchCatalog(){ return GAMES; },
+  async fetchUser(){ return STATE.user; },
+  async placeOrder(order){ await wait(1400); return { ok:true, orderId: "OA-" + Math.floor(100000+Math.random()*900000) }; },
+};
+const payments = {
+  async pay(order){
+    // order: { items: [{id, title, qty, price}], total }
+    if (isRealPaymentsAvailable()) {
+      const tg = window.Telegram.WebApp;
+      try{
+        const res = await fetch(`${CONFIG.apiBaseUrl}/api/create-invoice`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            initData: tg.initData,
+            items: order.items.map(i => ({ id: i.id, qty: i.qty })),
+          }),
+        });
+        if (!res.ok) {
+          const errBody = await res.json().catch(()=>({}));
+          throw new Error(errBody.error || `Server error (${res.status})`);
+        }
+        const { orderId, invoiceLink } = await res.json();
+        const status = await new Promise(resolve => tg.openInvoice(invoiceLink, resolve));
+        // status is one of: "paid" | "cancelled" | "failed" | "pending"
+        return { ok: status === "paid", orderId, status, real: true };
+      }catch(err){
+        console.error("Real payment failed:", err);
+        return { ok:false, error: err.message, real:true };
+      }
+    }
+    // ---- Fallback: simulated payment for local preview / testing outside Telegram ----
+    await wait(1600);
+    return { ok:true, real:false };
+  }
+};
+function wait(ms){ return new Promise(r=>setTimeout(r,ms)); }
+
+/* ---------------- telegram auth ---------------- */
+const auth = {
+  telegramLogin(){
+    try{
+      const tg = window.Telegram && window.Telegram.WebApp;
+      if (tg) {
+        tg.ready(); tg.expand();
+        const u = tg.initDataUnsafe && tg.initDataUnsafe.user;
+        if (u) {
+          return {
+            id: u.id, firstName: u.first_name, lastName: u.last_name || "",
+            username: u.username ? "@"+u.username : "", photoUrl: u.photo_url || null,
+          };
+        }
+      }
+    }catch(e){}
+    // fallback mock user (dev / browser preview) — set to an admin account so the
+    // Admin panel is reachable while testing outside of real Telegram. Real visitors
+    // opening this as an actual Telegram Mini App will get their own Telegram identity above.
+    return { id: 700104512, firstName:"Rutu", lastName:"Games", username:"@RutuGames", photoUrl:null };
+  }
+};
+
+/* ============================= DATA ============================= */
+const GENRES = ["Action","RPG","Adventure","Shooter","Survival","Horror","Simulation","Strategy","Sports","Fighting","Indie","Racing"];
+
+const RAW_GAMES = [
+["Grand Theft Auto V","Action",1.99,"Open-world crime saga across Los Santos.",4.8],
+["Red Dead Redemption 2","Adventure",1.99,"Epic outlaw tale in the fading American frontier.",4.9],
+["Cyberpunk 2077","RPG",1.79,"Neon dystopia open-world with deep character builds.",4.6],
+["Elden Ring","RPG",1.99,"Sprawling dark-fantasy world from FromSoftware.",4.9],
+["Black Myth: Wukong","Action",1.99,"Mythic action-RPG inspired by Journey to the West.",4.7],
+["Hogwarts Legacy","RPG",1.79,"Open-world wizarding adventure at Hogwarts.",4.5],
+["Baldur's Gate 3","RPG",1.99,"Party-based D&D epic with limitless choice.",4.9],
+["The Last of Us Part I","Adventure",1.79,"Cinematic post-apocalyptic survival story.",4.8],
+["God of War","Action",1.49,"Kratos and Atreus journey through Norse myth.",4.8],
+["God of War Ragnarök","Action",1.99,"The Norse saga concludes in epic fashion.",4.9],
+["Ghost of Tsushima","Action",1.79,"Samurai revenge tale on feudal Tsushima Island.",4.8],
+["Marvel's Spider-Man Remastered","Action",1.49,"Swing through New York as the web-slinger.",4.7],
+["Marvel's Spider-Man 2","Action",1.99,"Dual Spider-Men face Venom in NYC.",4.7],
+["Resident Evil 4","Horror",1.49,"Reimagined survival-horror classic.",4.8],
+["Resident Evil Village","Horror",1.29,"Gothic horror in a monster-filled village.",4.6],
+["Resident Evil 2","Horror",0.99,"Raccoon City remake of a genre-defining classic.",4.7],
+["Forza Horizon 5","Racing",1.49,"Open-world racing across vibrant Mexico.",4.7],
+["Microsoft Flight Simulator","Simulation",1.79,"Photoreal planet-scale flight sim.",4.5],
+["Euro Truck Simulator 2","Simulation",0.99,"Haul freight across a detailed Europe.",4.6],
+["American Truck Simulator","Simulation",0.99,"Long-haul trucking across the USA.",4.4],
+["Sons of the Forest","Survival",1.49,"Mutant-infested island survival sequel.",4.4],
+["The Forest","Survival",0.99,"Crash-landed cannibal-island survival horror.",4.5],
+["Lethal Company","Horror",0.99,"Co-op scavenging horror comedy.",4.6],
+["Phasmophobia","Horror",0.99,"Co-op ghost-hunting with real-time voice.",4.5],
+["Ready or Not","Shooter",1.49,"Tactical SWAT breach-and-clear shooter.",4.5],
+["Call of Duty: Modern Warfare III","Shooter",1.99,"High-octane modern military shooter.",4.1],
+["Call of Duty: Black Ops 6","Shooter",1.99,"Fast-paced black-ops campaign and multiplayer.",4.3],
+["EA Sports FC 25","Sports",1.99,"The world's game, reimagined each season.",4.2],
+["NBA 2K25","Sports",1.99,"The definitive basketball simulation.",4.0],
+["Mortal Kombat 1","Fighting",1.79,"Brutal reboot of the iconic fighting saga.",4.5],
+["Tekken 8","Fighting",1.99,"Next-gen entry in the legendary fighting series.",4.6],
+["Street Fighter 6","Fighting",1.79,"Stylish, accessible, endlessly deep fighter.",4.6],
+["Hades II","Indie",1.49,"Roguelike sequel diving into the Underworld.",4.8],
+["Hades","Indie",0.99,"Escape the Underworld in this acclaimed roguelike.",4.9],
+["Hollow Knight","Indie",0.99,"Beautifully hand-drawn metroidvania.",4.8],
+["Hollow Knight: Silksong","Indie",1.49,"Hornet's journey through Pharloom.",4.9],
+["Terraria","Indie",0.99,"2D sandbox adventure with endless crafting.",4.8],
+["Stardew Valley","Simulation",0.99,"Cozy farming and small-town life sim.",4.9],
+["Valheim","Survival",1.29,"Viking-themed procedurally generated survival.",4.7],
+["No Man's Sky","Adventure",1.49,"Explore an infinite procedural universe.",4.4],
+["Sid Meier's Civilization VI","Strategy",1.79,"Build an empire to stand the test of time.",4.6],
+["Sid Meier's Civilization V","Strategy",0.99,"The beloved turn-based empire builder.",4.6],
+["Crusader Kings III","Strategy",1.79,"Medieval dynasty and grand-strategy sim.",4.7],
+["RimWorld","Strategy",1.49,"Colony sim driven by emergent storytelling.",4.9],
+["Factorio","Strategy",1.29,"Automate everything in this factory-builder.",4.9],
+["Satisfactory","Simulation",1.49,"First-person factory-building on an alien planet.",4.8],
+["Project Zomboid","Survival",0.99,"Deep isometric zombie survival sandbox.",4.5],
+["Cities: Skylines II","Simulation",1.79,"Detailed modern city-building sim.",3.9],
+["Cities: Skylines","Simulation",0.99,"The city-builder that redefined the genre.",4.6],
+["Kingdom Come: Deliverance II","RPG",1.99,"Grounded medieval open-world RPG.",4.8],
+["Starfield","RPG",1.79,"Bethesda's space-faring open-world RPG.",4.0],
+["The Elder Scrolls V: Skyrim","RPG",0.99,"Legendary open-world fantasy epic.",4.8],
+["Fallout 4","RPG",0.99,"Post-nuclear open-world adventure.",4.5],
+["Fallout: New Vegas","RPG",0.99,"Fan-favorite wasteland RPG with deep choices.",4.7],
+["The Witcher 3: Wild Hunt","RPG",0.99,"Sprawling monster-hunting fantasy epic.",4.9],
+["Dark Souls III","RPG",1.29,"Punishing, atmospheric dark-fantasy action-RPG.",4.8],
+["Sekiro: Shadows Die Twice","Action",1.49,"Precision sword combat in Sengoku Japan.",4.8],
+["Bloodborne","RPG",1.29,"Gothic horror action-RPG from FromSoftware.",4.8],
+["Death Stranding","Adventure",1.29,"Genre-defying delivery odyssey.",4.2],
+["Horizon Zero Dawn","Adventure",0.99,"Hunt machines in a lush post-apocalyptic world.",4.7],
+["Horizon Forbidden West","Adventure",1.79,"Aloy's journey continues across a wild frontier.",4.6],
+["Days Gone","Adventure",0.99,"Biker survival across a zombie-ravaged Oregon.",4.3],
+["Cyberpunk 2077: Phantom Liberty","RPG",1.49,"Spy-thriller expansion set in Dogtown.",4.7],
+["Portal 2","Indie",0.99,"Mind-bending physics puzzler with dark wit.",4.9],
+["Half-Life: Alyx","Shooter",1.49,"VR return to the Half-Life universe.",4.8],
+["Left 4 Dead 2","Shooter",0.99,"Co-op zombie-horde survival shooter.",4.6],
+["DOOM Eternal","Shooter",1.29,"Hyper-fast demon-slaying shooter.",4.7],
+["DOOM (2016)","Shooter",0.99,"The brutal reboot that redefined the FPS.",4.7],
+["Wolfenstein: The New Order","Shooter",0.99,"Alt-history Nazi-resistance shooter.",4.5],
+["Dishonored 2","Action",0.99,"Stealth-action with supernatural powers.",4.6],
+["Prey","Shooter",0.99,"Atmospheric sci-fi immersive sim.",4.5],
+["Deus Ex: Mankind Divided","RPG",0.99,"Cyberpunk immersive-sim with player choice.",4.4],
+["Metro Exodus","Shooter",1.29,"Post-apocalyptic survival shooter across Russia.",4.6],
+["S.T.A.L.K.E.R. 2: Heart of Chornobyl","Shooter",1.79,"Open-world survival horror in the Zone.",4.1],
+["Alan Wake 2","Horror",1.99,"Psychological survival-horror thriller.",4.7],
+["Control","Action",1.29,"Supernatural action in the shifting Oldest House.",4.5],
+["Dead Space","Horror",1.49,"Remake of the sci-fi survival-horror classic.",4.7],
+["Outlast","Horror",0.99,"Found-footage style asylum horror.",4.4],
+["Amnesia: The Bunker","Horror",1.29,"Claustrophobic WWI survival horror.",4.4],
+["Little Nightmares II","Horror",0.99,"Eerie atmospheric puzzle-platformer.",4.6],
+["Monster Hunter: World","RPG",1.29,"Hunt colossal beasts in a living ecosystem.",4.7],
+["Monster Hunter Rise","RPG",1.29,"Fast-paced monster hunting with Wirebugs.",4.6],
+["Dragon's Dogma 2","RPG",1.99,"Pawn-driven open-world fantasy epic.",4.3],
+["Final Fantasy VII Remake","RPG",1.79,"Reimagining of the JRPG classic.",4.7],
+["Final Fantasy XVI","RPG",1.79,"Action-driven dark-fantasy epic.",4.5],
+["Persona 5 Royal","RPG",1.49,"Stylish turn-based JRPG about phantom thieves.",4.9],
+["NieR: Automata","RPG",1.29,"Philosophical action-RPG about androids.",4.8],
+["Diablo IV","RPG",1.79,"Dark, gothic action-RPG loot hunt.",4.3],
+["Path of Exile 2","RPG",1.49,"Deep, brutal action-RPG loot grind.",4.5],
+["Divinity: Original Sin 2","RPG",1.49,"Party-based fantasy RPG with elemental combat.",4.8],
+["Disco Elysium","RPG",1.29,"Narrative-driven detective RPG unlike any other.",4.9],
+["Cult of the Lamb","Indie",0.99,"Cute-yet-sinister cult management roguelike.",4.6],
+["Slay the Spire","Indie",0.99,"The deckbuilding roguelike that started a genre.",4.8],
+["Vampire Survivors","Indie",0.99,"Addictive minimalist survivors-like.",4.8],
+["Stray","Adventure",0.99,"Explore a neon cybercity as a stray cat.",4.6],
+["Outer Wilds","Adventure",0.99,"Time-loop space-exploration mystery.",4.9],
+["Baba Is You","Indie",0.99,"Rule-bending puzzle game about language.",4.7],
+["Clair Obscur: Expedition 33","RPG",1.99,"Turn-based French RPG epic across a surreal, crumbling world.",4.8],
+["Silent Hill 2","Horror",1.79,"Atmospheric psychological horror remake set in a fog-shrouded town.",4.6],
+["Marvel's Spider-Man: Miles Morales","Action",1.29,"A new hero swings through a snow-covered New York for the holidays.",4.6],
+["Final Fantasy VII Rebirth","RPG",1.99,"Second chapter of the reimagined classic, an epic open-world journey.",4.7],
+["Resident Evil 3","Horror",0.99,"Raccoon City remake pitting Jill Valentine against Nemesis.",4.4],
+["Lies of P","Action",1.29,"Dark Soulslike reimagining of Pinocchio in a gothic Belle Époque city.",4.5],
+["Wuchang: Fallen Feathers","RPG",1.49,"Punishing action-RPG set in a plague-ravaged fantasy China.",4.0],
+["Warhammer 40,000: Space Marine 2","Shooter",1.49,"Brutal third-person carnage against Tyranid hordes.",4.6],
+["Indiana Jones and the Great Circle","Adventure",1.79,"First-person globetrotting adventure starring the famous archaeologist.",4.5],
+["Atomic Heart","Shooter",1.29,"Surreal Soviet retro-futuristic shooter against rogue robots.",4.2],
+["A Plague Tale: Requiem","Adventure",1.29,"Siblings flee plague and rat swarms across war-torn medieval France.",4.6],
+["A Plague Tale: Innocence","Adventure",0.99,"The first chapter of a haunting tale of survival and rats.",4.5],
+["Star Wars Jedi: Survivor","Action",1.79,"Cal Kestis continues his Jedi journey across a galaxy in hiding.",4.5],
+["Star Wars Jedi: Fallen Order","Action",0.99,"A young Jedi evades the Empire in this Souls-inspired adventure.",4.5],
+["Ratchet & Clank: Rift Apart","Action",1.29,"Dimension-hopping platformer bursting with gadgets and colour.",4.7],
+["Uncharted: Legacy of Thieves Collection","Adventure",1.29,"Two cinematic treasure-hunting adventures in one remastered pack.",4.6],
+["Returnal","Shooter",1.29,"Roguelike bullet-hell survival on a shape-shifting alien world.",4.5],
+["Persona 3 Reload","RPG",1.79,"Remake of the beloved dark, stylish turn-based JRPG classic.",4.7],
+["Like a Dragon: Infinite Wealth","RPG",1.79,"Kasuga's saga heads to Hawaii in this heartfelt, hilarious RPG.",4.8],
+["Judgment","Adventure",0.99,"Kamurocho noir detective drama from the makers of Like a Dragon.",4.5],
+["Lost Judgment","Adventure",1.29,"The detective saga continues with a school-set mystery.",4.6],
+["The Callisto Protocol","Horror",0.99,"Claustrophobic sci-fi survival horror aboard a prison moon.",3.9],
+["Mafia: Definitive Edition","Adventure",0.99,"Remake of the classic Prohibition-era crime saga.",4.3],
+["Mafia II: Definitive Edition","Adventure",0.99,"Vito's rise through the mob in a remastered 1940s-50s crime epic.",4.2],
+];
+
+let seed = 42;
+function rnd(){ seed = (seed*1103515245+12345)%2147483648; return seed/2147483648; }
+const GAMES = RAW_GAMES.map((g,i)=>{
+  const [title, genre, price, desc, rating] = g;
+  const onSale = rnd() < 0.38;
+  const discountPct = onSale ? [10,15,20,25,30,40][Math.floor(rnd()*6)] : 0;
+  const orig = onSale ? +(price/(1-discountPct/100)).toFixed(2) : null;
+  const hue = Math.floor(rnd()*360);
+  const hue2 = (hue+70)%360;
+  return {
+    id: "g"+(i+1),
+    title, genre, price, orig, discountPct, desc, rating,
+    isNew: rnd() < 0.14,
+    isHot: rnd() < 0.18,
+    hue, hue2,
+    sold: Math.floor(200+rnd()*9800),
+  };
+});
+
+/* ============================= I18N ============================= */
+const RATES = { USD: 1, EUR: 0.92, RUB: 92, STARS: 1/0.013 }; // approx: 1 Telegram Star ≈ $0.013
+const CUR_META = {
+  USD: { symbol:"$", label:"US Dollar" },
+  EUR: { symbol:"€", label:"Euro" },
+  RUB: { symbol:"₽", label:"Russian Ruble" },
+  STARS: { symbol:"⭐", label:"Telegram Stars" },
+};
+const I18N = {
+  en: {
+    store_sub:"Digital Activation Keys",
+    search_ph:"Search games…",
+    tab_home:"Home", tab_catalog:"Catalog", tab_pay:"Quick Pay", tab_cart:"Cart", tab_profile:"Profile",
+    hero_tag:"Can't find a game?", hero_title:"We'll find it<br/>for you", hero_sub:"Contact support — we will definitely find your game.", hero_btn:"Contact support",
+    sec_popular:"🔥 Popular now", sec_new:"✨ New arrivals", sec_sale:"🏷️ On sale", sec_foryou:"For you", see_all:"See all",
+    all_games:"All games", no_results:"No games match your search.",
+    activated:"Activated", delivery:"Instant", delivery_l:"Delivery", platform:"PC / Steam", platform_l:"Platform",
+    price_l:"Price", add_to_cart:"Add to Cart", back_to_catalog:"Back to catalog",
+    today_off:"today", new_release:"New release",
+    cart_title:"Your Cart", cart_empty:"Your cart is empty.<br/>Browse the catalog to find something great.", browse_games:"Browse games",
+    subtotal:"Subtotal", total:"Total", checkout:"Checkout",
+    processing:"Processing payment…", processing_sub:"Confirming your order. This is instant.",
+    purchase_complete:"Purchase complete", order_confirmed:"confirmed. Your keys have been added to your library.",
+    view_order:"View order & instructions", continue_shopping:"Continue shopping", order_label:"Order",
+    guide_title:"Keep your activation working", guide_intro:"After payment we send a private, detailed setup guide by message. Follow it closely — it's what keeps your access valid.",
+    guide_rule1:"Accounts are licensed strictly for single-player, offline play.",
+    guide_rule2:"Never sign back into the account online. Reconnecting will sign it out and end your access, no exceptions.",
+    guide_rule3:"No time limit — play at your own pace.",
+    guide_rule4:"If these rules are broken, we're unable to offer support or restore access.",
+    referral_title:"Referral program", referral_card_sub:"Invite friends, earn store credit", referral_invited:"Invited", referral_earned:"Earned",
+    referral_hero_title:"Give {reward}, get {reward}", referral_hero_sub:"Share your link — when a friend makes their first purchase, you both get store credit.",
+    referral_your_link:"Your referral link", copy:"Copy", toast_ref_copied:"Link copied to clipboard",
+    referral_how_title:"How it works", referral_step1:"Share your personal link with a friend.", referral_step2:"When they complete their first purchase, you both receive {reward} in store credit.",
+    referral_fineprint:"One reward per invited friend, credited after their first completed order. Store credit can be used toward future purchases.",
+    order_history:"Order history", favorites:"Favorites", notifications:"Notifications",
+    settings:"Settings", support:"Support", admin_panel:"Admin panel",
+    no_orders:"No orders yet — your purchases will show up here instantly after checkout.",
+    delivered:"Delivered", key_note:"Activation keys sent to your Telegram DMs. Redeem via Steam → Games → Activate a Product on Steam.",
+    no_favorites:"No favorites yet — tap the heart on any game to save it here.",
+    settings_language:"Language", settings_currency:"Currency", settings_payment:"Payment provider", stars_balance:"Your Telegram Stars balance",
+    payment_live:"Live (Telegram Stars)", payment_preview:"Preview mode (simulated)", in_development:"In development",
+    settings_push:"Push notifications", settings_theme:"Theme", settings_on:"On", settings_off:"Off", settings_dark:"Dark (Telegram)", settings_light:"Light",
+    settings_hint:"More options connect once a backend is attached — see architecture notes in source.",
+    settings_currency_hint:"Approximate rate for demo purposes. Catalog base currency is USD.",
+    support_title:"Need help with an order?", support_sub:"Our team responds within a few hours via Telegram. Include your order ID for faster service.",
+    support_msg:"Message support on Telegram", admin_restricted:"The Admin panel is only available to store administrators.",
+    admin_catalog:"Catalog", admin_orders:"Orders", admin_users:"Users", admin_stats:"Statistics",
+    total_revenue:"Total revenue", total_orders:"Total orders", games_in_catalog:"Games in catalog", registered_users:"Registered users",
+    titles_by_genre:"Titles by genre", add_new_game:"Add new game", admin_testing_title:"Testing tool", admin_testing_sub:"Credit your own balance without paying, for testing checkout. Remove before real launch.", admin_testing_btn:"Grant to myself",
+    no_orders_session:"No orders placed yet this session.", paid:"Paid",
+    edit_game:"Edit game", add_game:"Add new game", title_l:"Title", genre_l:"Genre", price_usd_l:"Price (USD)", desc_l:"Description",
+    save_changes:"Save changes",
+    image_l:"Cover image", image_url_ph:"Paste image URL…", image_upload_btn:"Upload from device", image_or:"or", no_image_yet:"No image yet",
+    image_paste_hint:"Click the box above, then paste (Ctrl+V) a copied image — no download needed", toast_image_pasted:"Image pasted ✓",
+    toast_added:"Added to cart 🛒", toast_cart_empty_pay:"Your cart is empty — add a game first",
+    topup_title:"Top up balance", topup_current_balance:"Current balance", topup_custom_label:"Or enter a custom amount (Stars)", topup_custom_ph:"e.g. 1500",
+    topup_selected_label:"You'll add", topup_pay_stars:"Pay with Telegram Stars", topup_pay_crypto:"Pay with Crypto (Telegram Wallet)",
+    topup_footnote:"Funds are added to your in-app balance instantly after payment is confirmed.",
+    topup_processing:"Opening payment…", topup_waiting_crypto:"Waiting for confirmation — your balance updates automatically once the payment clears.",
+    toast_topup_confirmed:"Balance topped up ✓", toast_topup_min:"Minimum top-up is 50 ⭐", toast_insufficient_balance:"Not enough balance — top up to continue",
+    toast_payment_fail:"Payment failed. Try again.", toast_game_removed:"Game removed", toast_price_updated:"Price updated",
+    toast_game_updated:"Game updated", toast_game_added:"Game added",
+    toast_title_required:"Title required", toast_image_updated:"Image updated", toast_backend_not_configured:"Backend not connected yet — changes only apply to this preview",
+    game_not_found:"Game not found.", instant_note:"This activation key unlocks the full game for single-player, offline-capable play — redeemed instantly to your library after checkout, no waiting, no shipping.",
+    how_title:"What is Offline Activation?", how_sub:"Here's exactly how you get access to your game:",
+    how_step1:"The seller provides the login and password for a Steam account that already owns the purchased game.",
+    how_step2:"You log into that account and download the game to your PC.",
+    how_step3:"Once installed, Steam is switched into Offline Mode.",
+    how_step4:"The game launches and runs without needing a constant internet connection.",
+  },
+  ru: {
+    store_sub:"Цифровые Ключи Активации",
+    search_ph:"Поиск игр…",
+    tab_home:"Главная", tab_catalog:"Каталог", tab_pay:"Быстрая оплата", tab_cart:"Корзина", tab_profile:"Профиль",
+    hero_tag:"Не нашли игру?", hero_title:"Мы обязательно<br/>её найдём", hero_sub:"Свяжитесь с поддержкой — мы точно найдём вашу игру.", hero_btn:"Написать в поддержку",
+    sec_popular:"🔥 Популярное сейчас", sec_new:"✨ Новинки", sec_sale:"🏷️ Со скидкой", sec_foryou:"Для вас", see_all:"Все",
+    all_games:"Все игры", no_results:"По вашему запросу ничего не найдено.",
+    activated:"Активаций", delivery:"Мгновенно", delivery_l:"Доставка", platform:"PC / Steam", platform_l:"Платформа",
+    price_l:"Цена", add_to_cart:"В корзину", back_to_catalog:"Вернуться к каталогу",
+    today_off:"сегодня", new_release:"Новинка",
+    cart_title:"Ваша корзина", cart_empty:"Ваша корзина пуста.<br/>Загляните в каталог, чтобы найти что-то интересное.", browse_games:"В каталог",
+    subtotal:"Подытог", total:"Итого", checkout:"Оформить заказ",
+    processing:"Обработка платежа…", processing_sub:"Подтверждаем ваш заказ. Это происходит мгновенно.",
+    purchase_complete:"Покупка завершена", order_confirmed:"подтверждён. Ключи добавлены в вашу библиотеку.",
+    view_order:"Заказ и инструкция", continue_shopping:"Продолжить покупки", order_label:"Заказ",
+    guide_title:"Как сохранить активацию", guide_intro:"После оплаты мы пришлём личным сообщением подробную инструкцию по настройке. Следуйте ей внимательно — именно это сохраняет доступ активным.",
+    guide_rule1:"Аккаунты выдаются строго для одиночной игры в офлайн-режиме.",
+    guide_rule2:"Никогда не заходите в аккаунт онлайн повторно. Повторный вход online завершит сеанс и лишит доступа — без исключений.",
+    guide_rule3:"Без ограничений по времени — играйте в своём темпе.",
+    guide_rule4:"При нарушении этих правил мы не сможем оказать поддержку или восстановить доступ.",
+    referral_title:"Реферальная программа", referral_card_sub:"Приглашайте друзей — получайте бонусы", referral_invited:"Приглашено", referral_earned:"Заработано",
+    referral_hero_title:"Дарите {reward}, получайте {reward}", referral_hero_sub:"Поделитесь ссылкой — когда друг сделает первую покупку, вы оба получите бонус на счёт.",
+    referral_your_link:"Ваша реферальная ссылка", copy:"Копировать", toast_ref_copied:"Ссылка скопирована",
+    referral_how_title:"Как это работает", referral_step1:"Поделитесь своей персональной ссылкой с другом.", referral_step2:"Когда друг совершит первую покупку, вы оба получите {reward} на счёт.",
+    referral_fineprint:"Одна награда за каждого приглашённого друга, начисляется после его первого завершённого заказа. Бонусы можно использовать при будущих покупках.",
+    order_history:"История заказов", favorites:"Избранное", notifications:"Уведомления",
+    settings:"Настройки", support:"Поддержка", admin_panel:"Админ-панель",
+    no_orders:"Заказов пока нет — они появятся здесь сразу после оплаты.",
+    delivered:"Доставлено", key_note:"Ключи активации отправлены вам в Telegram. Активируйте через Steam → Игры → Активировать через Steam.",
+    no_favorites:"Пока нет избранного — нажмите на сердечко у любой игры, чтобы сохранить её здесь.",
+    settings_language:"Язык", settings_currency:"Валюта", settings_payment:"Способ оплаты", stars_balance:"Ваш баланс Telegram Stars",
+    payment_live:"Реальная оплата (Telegram Stars)", payment_preview:"Тестовый режим (имитация)", in_development:"В разработке",
+    settings_push:"Push-уведомления", settings_theme:"Тема", settings_on:"Вкл", settings_off:"Выкл", settings_dark:"Тёмная (Telegram)", settings_light:"Светлая",
+    settings_hint:"Больше настроек станет доступно после подключения сервера — см. заметки об архитектуре в коде.",
+    settings_currency_hint:"Курс ориентировочный, для демонстрации. Базовая валюта каталога — USD.",
+    support_title:"Нужна помощь с заказом?", support_sub:"Наша команда отвечает в течение нескольких часов в Telegram. Укажите номер заказа для быстрого ответа.",
+    support_msg:"Написать в поддержку в Telegram", admin_restricted:"Админ-панель доступна только администраторам магазина.",
+    admin_catalog:"Каталог", admin_orders:"Заказы", admin_users:"Пользователи", admin_stats:"Статистика",
+    total_revenue:"Общая выручка", total_orders:"Всего заказов", games_in_catalog:"Игр в каталоге", registered_users:"Пользователей",
+    titles_by_genre:"Игры по жанрам", add_new_game:"Добавить игру", admin_testing_title:"Тестовый инструмент", admin_testing_sub:"Начислить себе баланс без оплаты, чтобы протестировать покупку. Уберите перед реальным запуском.", admin_testing_btn:"Начислить себе",
+    no_orders_session:"В этой сессии заказов ещё не было.", paid:"Оплачен",
+    edit_game:"Редактировать игру", add_game:"Добавить игру", title_l:"Название", genre_l:"Жанр", price_usd_l:"Цена (USD)", desc_l:"Описание",
+    save_changes:"Сохранить",
+    image_l:"Обложка игры", image_url_ph:"Вставьте ссылку на изображение…", image_upload_btn:"Загрузить с устройства", image_or:"или", no_image_yet:"Изображения пока нет",
+    image_paste_hint:"Нажмите на область выше, затем вставьте (Ctrl+V) скопированную картинку — скачивать не нужно", toast_image_pasted:"Изображение вставлено ✓",
+    toast_added:"Добавлено в корзину 🛒", toast_cart_empty_pay:"Корзина пуста — сначала добавьте игру",
+    topup_title:"Пополнение баланса", topup_current_balance:"Текущий баланс", topup_custom_label:"Или введите свою сумму (в звёздах)", topup_custom_ph:"например, 1500",
+    topup_selected_label:"Будет добавлено", topup_pay_stars:"Оплатить Telegram Stars", topup_pay_crypto:"Оплатить криптой (Telegram Wallet)",
+    topup_footnote:"Средства зачисляются на баланс мгновенно после подтверждения оплаты.",
+    topup_processing:"Открываем оплату…", topup_waiting_crypto:"Ожидаем подтверждение — баланс обновится автоматически после зачисления платежа.",
+    toast_topup_confirmed:"Баланс пополнен ✓", toast_topup_min:"Минимальное пополнение — 50 ⭐", toast_insufficient_balance:"Недостаточно баланса — пополните, чтобы продолжить",
+    toast_payment_fail:"Оплата не прошла. Попробуйте снова.", toast_game_removed:"Игра удалена", toast_price_updated:"Цена обновлена",
+    toast_game_updated:"Игра обновлена", toast_game_added:"Игра добавлена",
+    toast_title_required:"Укажите название", toast_image_updated:"Изображение обновлено", toast_backend_not_configured:"Бэкенд ещё не подключён — изменения применятся только в этом превью",
+    game_not_found:"Игра не найдена.", instant_note:"Этот ключ активации открывает полную версию игры для одиночного прохождения с возможностью офлайн-игры — добавляется в вашу библиотеку мгновенно после оплаты, без ожидания и доставки.",
+    how_title:"Что такое Offline Activation?", how_sub:"Вот как именно вы получаете доступ к игре:",
+    how_step1:"Продавец предоставляет логин и пароль от Steam-аккаунта, на котором уже куплена игра.",
+    how_step2:"Покупатель входит в этот аккаунт и скачивает игру на свой ПК.",
+    how_step3:"После установки Steam переводится в автономный режим (Offline Mode).",
+    how_step4:"Игра запускается и работает без постоянного подключения к интернету.",
+  },
+  zh: {
+    store_sub:"数字激活密钥",
+    search_ph:"搜索游戏…",
+    tab_home:"首页", tab_catalog:"目录", tab_pay:"快速支付", tab_cart:"购物车", tab_profile:"我的",
+    hero_tag:"没找到想要的游戏?", hero_title:"我们一定能<br/>帮您找到", hero_sub:"联系客服 — 我们一定会找到您想要的游戏。", hero_btn:"联系客服",
+    sec_popular:"🔥 热门推荐", sec_new:"✨ 新品上架", sec_sale:"🏷️ 特价优惠", sec_foryou:"为你推荐", see_all:"查看全部",
+    all_games:"全部游戏", no_results:"没有找到匹配的游戏。",
+    activated:"已激活", delivery:"即时", delivery_l:"发货方式", platform:"PC / Steam", platform_l:"平台",
+    price_l:"价格", add_to_cart:"加入购物车", back_to_catalog:"返回目录",
+    today_off:"今日", new_release:"新品",
+    cart_title:"我的购物车", cart_empty:"购物车是空的。<br/>去目录看看有什么好游戏吧。", browse_games:"浏览目录",
+    subtotal:"小计", total:"总计", checkout:"去结算",
+    processing:"正在处理付款…", processing_sub:"正在确认您的订单，这将立即完成。",
+    purchase_complete:"购买成功", order_confirmed:"已确认。密钥已添加到您的库中。",
+    view_order:"查看订单和使用说明", continue_shopping:"继续购物", order_label:"订单",
+    guide_title:"如何保持激活有效", guide_intro:"付款后，我们会通过私信发送详细的设置指南。请严格按照指南操作 — 这是保持访问权限有效的关键。",
+    guide_rule1:"账号仅授权用于单人离线游戏。",
+    guide_rule2:"切勿再次在线登录该账号。重新联网将导致账号退出登录并终止访问权限，没有例外。",
+    guide_rule3:"没有时间限制 — 按照自己的节奏游玩。",
+    guide_rule4:"若违反上述规则，我们将无法提供支持或恢复访问权限。",
+    referral_title:"推荐计划", referral_card_sub:"邀请好友，赚取商店积分", referral_invited:"已邀请", referral_earned:"已赚取",
+    referral_hero_title:"赠送 {reward}，获得 {reward}", referral_hero_sub:"分享您的链接 — 好友完成首次购买后，你们双方都将获得商店积分。",
+    referral_your_link:"您的推荐链接", copy:"复制", toast_ref_copied:"链接已复制",
+    referral_how_title:"运作方式", referral_step1:"将您的专属链接分享给好友。", referral_step2:"好友完成首次购买后，你们双方将各获得 {reward} 商店积分。",
+    referral_fineprint:"每位受邀好友仅可获得一次奖励，将在其完成首笔订单后到账。商店积分可用于未来购买。",
+    order_history:"订单记录", favorites:"收藏夹", notifications:"通知",
+    settings:"设置", support:"客服支持", admin_panel:"管理后台",
+    no_orders:"暂无订单 — 付款成功后订单会立即显示在这里。",
+    delivered:"已发货", key_note:"激活密钥已发送到您的 Telegram 私信。通过 Steam → 游戏 → 激活产品 完成兑换。",
+    no_favorites:"暂无收藏 — 点击游戏上的心形图标即可收藏。",
+    settings_language:"语言", settings_currency:"货币", settings_payment:"支付方式", stars_balance:"您的 Telegram Stars 余额",
+    payment_live:"正式支付（Telegram Stars）", payment_preview:"预览模式（模拟）", in_development:"开发中",
+    settings_push:"推送通知", settings_theme:"主题", settings_on:"已开启", settings_off:"已关闭", settings_dark:"深色（Telegram）", settings_light:"浅色",
+    settings_hint:"接入后端服务器后将解锁更多设置 — 详见源码中的架构说明。",
+    settings_currency_hint:"汇率仅供演示参考。目录基础货币为美元（USD）。",
+    support_title:"订单需要帮助吗？", support_sub:"我们的团队会在几小时内通过 Telegram 回复您，请附上订单号以便更快处理。",
+    support_msg:"通过 Telegram 联系客服", admin_restricted:"管理后台仅限商店管理员使用。",
+    admin_catalog:"游戏目录", admin_orders:"订单", admin_users:"用户", admin_stats:"数据统计",
+    total_revenue:"总收入", total_orders:"总订单数", games_in_catalog:"目录游戏数", registered_users:"注册用户数",
+    titles_by_genre:"按类型统计", add_new_game:"添加新游戏", admin_testing_title:"测试工具", admin_testing_sub:"无需付款即可为自己充值余额，用于测试结账流程。正式上线前请移除此功能。", admin_testing_btn:"给自己充值",
+    no_orders_session:"本次会话中还没有订单。", paid:"已支付",
+    edit_game:"编辑游戏", add_game:"添加新游戏", title_l:"标题", genre_l:"类型", price_usd_l:"价格（USD）", desc_l:"描述",
+    save_changes:"保存更改",
+    image_l:"封面图片", image_url_ph:"粘贴图片链接…", image_upload_btn:"从设备上传", image_or:"或", no_image_yet:"暂无图片",
+    image_paste_hint:"点击上方区域，然后粘贴（Ctrl+V）已复制的图片 — 无需先下载", toast_image_pasted:"图片已粘贴 ✓",
+    toast_added:"已加入购物车 🛒", toast_cart_empty_pay:"购物车是空的 — 请先添加一款游戏",
+    topup_title:"充值余额", topup_current_balance:"当前余额", topup_custom_label:"或输入自定义金额（星星）", topup_custom_ph:"例如 1500",
+    topup_selected_label:"将充值", topup_pay_stars:"使用 Telegram Stars 支付", topup_pay_crypto:"使用加密货币支付（Telegram Wallet）",
+    topup_footnote:"支付确认后，余额将立即到账。",
+    topup_processing:"正在打开支付…", topup_waiting_crypto:"正在等待确认 — 支付到账后余额将自动更新。",
+    toast_topup_confirmed:"余额已充值 ✓", toast_topup_min:"最低充值金额为 50 ⭐", toast_insufficient_balance:"余额不足 — 请先充值",
+    toast_payment_fail:"支付失败，请重试。", toast_game_removed:"游戏已删除", toast_price_updated:"价格已更新",
+    toast_game_updated:"游戏已更新", toast_game_added:"游戏已添加",
+    toast_title_required:"请输入标题", toast_image_updated:"图片已更新", toast_backend_not_configured:"后端尚未连接 — 更改仅在此预览中生效",
+    game_not_found:"未找到该游戏。", instant_note:"该激活密钥可解锁完整的单人游戏内容，支持离线游玩 — 付款后立即添加到您的游戏库，无需等待，无需物流配送。",
+    how_title:"什么是 Offline Activation？", how_sub:"以下是获取游戏访问权限的具体流程：",
+    how_step1:"卖家提供已购买该游戏的 Steam 账号的登录名和密码。",
+    how_step2:"买家登录该账号并将游戏下载到自己的电脑上。",
+    how_step3:"安装完成后，将 Steam 切换至离线模式（Offline Mode）。",
+    how_step4:"游戏无需持续联网即可启动和运行。",
+  }
+};
+function t(k){ return (I18N[STATE.lang] && I18N[STATE.lang][k]) || I18N.en[k] || k; }
+const GENRE_RU = { Action:"Экшен", RPG:"РПГ", Adventure:"Приключения", Shooter:"Шутер", Survival:"Выживание", Horror:"Хоррор", Simulation:"Симулятор", Strategy:"Стратегия", Sports:"Спорт", Fighting:"Файтинг", Indie:"Инди", Racing:"Гонки", All:"Все" };
+const GENRE_ZH = { Action:"动作", RPG:"角色扮演", Adventure:"冒险", Shooter:"射击", Survival:"生存", Horror:"恐怖", Simulation:"模拟", Strategy:"策略", Sports:"体育", Fighting:"格斗", Indie:"独立", Racing:"赛车", All:"全部" };
+function trGenre(g){
+  if (STATE.lang==="ru") return GENRE_RU[g]||g;
+  if (STATE.lang==="zh") return GENRE_ZH[g]||g;
+  return g;
+}
+
+/* ============================= STATE ============================= */
+const STATE = {
+  screen: "home",
+  lang: "en",
+  currency: "STARS",
+  starsBalance: 0, // real Telegram Stars wallet balance, fetched from backend on load (see refreshBalance())
+  pushEnabled: true,
+  theme: "dark", // "dark" | "light"
+  user: null,
+  cart: {},        // id -> qty
+  favorites: new Set(),
+  orders: [],
+  referral: {
+    code: null,           // this user's own referral code, fetched from backend
+    invited: 0,          // friends who joined via this user's link
+    converted: 0,         // friends who made a first purchase (reward-earning)
+    earnedStars: 0,        // total Stars earned from referrals
+  },
+  users: [
+    { id:700104512, name:"Alex Ivanov", handle:"@alexi", spent:18.4, orders:6 },
+    { id:812233441, name:"Mia Chen", handle:"@miac", spent:41.2, orders:14 },
+    { id:600991223, name:"Noah Weber", handle:"@noahw", spent:6.5, orders:2 },
+    { id:733410098, name:"Sara Lopez", handle:"@saral", spent:29.9, orders:9 },
+  ],
+  search:"",
+  activeGenre:"All",
+  detailId:null,
+  adminTab:"games",
+};
+
+/* ============================= HELPERS ============================= */
+const $ = sel => document.querySelector(sel);
+const app = $("#app");
+function money(usd){
+  const cur = STATE.currency;
+  if (cur==="EUR") return "€"+(usd*RATES.EUR).toFixed(2);
+  if (cur==="RUB") return Math.round(usd*RATES.RUB).toLocaleString("ru-RU")+" ₽";
+  if (cur==="STARS") return Math.round(usd*RATES.STARS)+" ⭐";
+  return "$"+usd.toFixed(2);
+}
+function initials(t){ return t.split(" ").filter(w=>w.length>1||/[A-Za-z]/.test(w)).slice(0,2).map(w=>w[0]).join("").toUpperCase(); }
+function coverStyle(g){
+  if (g.imageUrl) return `background-image:url('${g.imageUrl.replace(/'/g,"%27")}'); background-size:cover; background-position:center;`;
+  return `background:linear-gradient(150deg,hsl(${g.hue} 70% 22%),hsl(${g.hue2} 65% 14%));`;
+}
+function starIcon(){ return `<svg style="width:10px;height:10px;" viewBox="0 0 20 20" fill="currentColor"><path d="M10 1l2.6 6.2 6.7.5-5.1 4.4 1.6 6.5L10 15.2 4.2 18.6l1.6-6.5L.7 7.7l6.7-.5z"/></svg>`; }
+function cartCount(){ return Object.values(STATE.cart).reduce((a,b)=>a+b,0); }
+function cartTotal(){
+  let t=0; for(const id in STATE.cart){ const g=GAMES.find(x=>x.id===id); t += g.price*STATE.cart[id]; }
+  return t;
+}
+// Sums per-item rounded Stars prices (matches how the backend catalog rounds
+// each game's price individually) so the total always matches exactly what
+// the server will charge — avoids off-by-one-star mismatches from rounding
+// a lump USD total instead.
+function cartTotalStars(){
+  let stars=0; for(const id in STATE.cart){ const g=GAMES.find(x=>x.id===id); stars += Math.round(g.price*RATES.STARS)*STATE.cart[id]; }
+  return stars;
+}
+function toast(msg){
+  const t=$("#toast"); t.innerHTML = msg; t.classList.add("show");
+  clearTimeout(toast._t); toast._t = setTimeout(()=>t.classList.remove("show"), 2200);
+}
+function openSheet(html){
+  $("#sheet").innerHTML = `<div class="sheet-handle"></div>` + html;
+  $("#overlay").classList.add("show"); $("#sheet").classList.add("show");
+  $("#sheet").style.transition = ""; $("#sheet").style.transform = "";
+  bindSheetDrag();
+}
+function closeSheet(){ $("#overlay").classList.remove("show"); $("#sheet").classList.remove("show"); $("#sheet").style.transform = ""; }
+$("#overlay").addEventListener("click", closeSheet);
+
+// Drag the handle down to dismiss the sheet, like a native bottom sheet.
+// Tapping the dimmed overlay also closes it (wired right above).
+const sheetDrag = { active:false, startY:0, currentY:0 };
+window.addEventListener("mousemove", (e)=>{
+  if (!sheetDrag.active) return;
+  sheetDrag.currentY = Math.max(0, e.clientY - sheetDrag.startY);
+  $("#sheet").style.transform = `translateY(${sheetDrag.currentY}px)`;
+});
+window.addEventListener("mouseup", ()=>{
+  if (!sheetDrag.active) return;
+  sheetDrag.active = false;
+  const sheet = $("#sheet");
+  sheet.style.transition = "";
+  if (sheetDrag.currentY > 90) closeSheet(); else sheet.style.transform = "translateY(0)";
+  sheetDrag.currentY = 0;
+});
+function bindSheetDrag(){
+  const handle = $("#sheet").querySelector(".sheet-handle");
+  if (!handle) return;
+  function start(y){ sheetDrag.active = true; sheetDrag.startY = y; $("#sheet").style.transition = "none"; }
+  function move(y){ if(!sheetDrag.active) return; sheetDrag.currentY = Math.max(0, y - sheetDrag.startY); $("#sheet").style.transform = `translateY(${sheetDrag.currentY}px)`; }
+  function end(){
+    if (!sheetDrag.active) return;
+    sheetDrag.active = false;
+    const sheet = $("#sheet");
+    sheet.style.transition = "";
+    if (sheetDrag.currentY > 90) closeSheet(); else sheet.style.transform = "translateY(0)";
+    sheetDrag.currentY = 0;
+  }
+  handle.addEventListener("touchstart", (e)=> start(e.touches[0].clientY), {passive:true});
+  handle.addEventListener("touchmove", (e)=> move(e.touches[0].clientY), {passive:true});
+  handle.addEventListener("touchend", end);
+  handle.addEventListener("mousedown", (e)=> start(e.clientY));
+}
+
+function go(screen, params){
+  STATE.screen = screen;
+  if(params) Object.assign(STATE, params);
+  render();
+  window.scrollTo(0,0);
+}
+
+/* ============================= ICONS ============================= */
+const ICO = {
+  home:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 11l9-7 9 7"/><path d="M5 10v10h5v-6h4v6h5V10"/></svg>`,
+  grid:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>`,
+  cart:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="21" r="1.4"/><circle cx="18" cy="21" r="1.4"/><path d="M2 3h2l2.6 12.6a2 2 0 0 0 2 1.6h8.8a2 2 0 0 0 2-1.6L21 7H5.2"/></svg>`,
+  user:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 5-6 8-6s6.5 2 8 6"/></svg>`,
+  search:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>`,
+  bell:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M9.5 20a2.5 2.5 0 0 0 5 0"/></svg>`,
+  heart:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 20s-7-4.6-9.3-9C1 7.5 3 4 6.6 4 9 4 11 5.6 12 7c1-1.4 3-3 5.4-3C21 4 23 7.5 21.3 11 19 15.4 12 20 12 20z"/></svg>`,
+  heartFill:`<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 20s-7-4.6-9.3-9C1 7.5 3 4 6.6 4 9 4 11 5.6 12 7c1-1.4 3-3 5.4-3C21 4 23 7.5 21.3 11 19 15.4 12 20 12 20z"/></svg>`,
+  back:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>`,
+  chev:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>`,
+  box:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 8l-9-5-9 5 9 5 9-5z"/><path d="M3 8v8l9 5 9-5V8"/><path d="M12 13v8"/></svg>`,
+  gift:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="8" width="18" height="13" rx="2"/><path d="M3 12h18"/><path d="M12 8v13"/><path d="M12 8c-1.5 0-4-1-4-3.2S9.5 2 11 2.5C12 2.8 12 5 12 8z"/><path d="M12 8c1.5 0 4-1 4-3.2S14.5 2 13 2.5C12 2.8 12 5 12 8z"/></svg>`,
+  tag:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M20 12l-8 8-9-9V4h7z"/><circle cx="7.5" cy="7.5" r="1.3" fill="currentColor" stroke="none"/></svg>`,
+  cog:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.2-1.6l2-1.6-2-3.4-2.4.9a7 7 0 0 0-2.8-1.6L13 2h-4l-.6 2.7a7 7 0 0 0-2.8 1.6l-2.4-.9-2 3.4 2 1.6A7 7 0 0 0 3 12c0 .5 0 1.1.2 1.6l-2 1.6 2 3.4 2.4-.9c.8.7 1.8 1.3 2.8 1.6L9 22h4l.6-2.7c1-.3 2-.9 2.8-1.6l2.4.9 2-3.4-2-1.6c.2-.5.2-1.1.2-1.6z"/></svg>`,
+  support:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="3.4"/><path d="M5 5l4.2 4.2M19 5l-4.2 4.2M5 19l4.2-4.2M19 19l-4.2-4.2"/></svg>`,
+  shield:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3l7 3v6c0 5-3.4 8.5-7 9.5C8.4 20.5 5 17 5 12V6z"/></svg>`,
+  trash:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></svg>`,
+  plus:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>`,
+  link:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 15L15 9"/><path d="M11 6l1.4-1.4a4 4 0 0 1 5.7 5.7L16.7 11.7"/><path d="M13 18l-1.4 1.4a4 4 0 0 1-5.7-5.7L7.3 12.3"/></svg>`,
+  copy:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg>`,
+  globe:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18z"/></svg>`,
+  card:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 10h19"/><path d="M6 15h4"/></svg>`,
+  moon:`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 12.5A9 9 0 1 1 11.5 3a7 7 0 0 0 9.5 9.5z"/></svg>`,
+};
+
+/* ============================= RENDER: SHELL ============================= */
+function render(){
+  app.innerHTML = `
+    ${STATE.screen!=="checkout-loading" && STATE.screen!=="checkout-success" ? topbar() : ""}
+    <div class="screen active">${renderScreen()}</div>
+    ${showTabbar() ? tabbar() : ""}
+  `;
+  bindEvents();
+}
+function showTabbar(){ return !["detail","checkout-loading","checkout-success","admin"].includes(STATE.screen); }
+
+function topbar(){
+  if (STATE.screen==="detail") return `
+    <div class="topbar">
+      <div class="icon-btn" data-nav="back">${ICO.back}</div>
+      <div class="icon-btn" data-toggle-fav="${STATE.detailId}">${STATE.favorites.has(STATE.detailId)?ICO.heartFill:ICO.heart}</div>
+    </div>`;
+  if (STATE.screen==="admin" || STATE.screen==="checkout-loading" || STATE.screen==="checkout-success") return "";
+  const langLabel = { en:"EN", ru:"RU", zh:"中文" }[STATE.lang] || "EN";
+  const curLabel = { STARS:"⭐ XTR", USD:"$ USD", EUR:"€ EUR", RUB:"₽ RUB" }[STATE.currency] || "⭐ XTR";
+  return `
+    <div class="topbar">
+      <div class="brand">
+        <div class="brand-mark">OA</div>
+        <div class="brand-name">${CONFIG.storeName}<span>${t('store_sub')}</span></div>
+      </div>
+      <div class="icon-btn" data-nav="notifications">${ICO.bell}</div>
+    </div>
+    <div class="quickbar">
+      <div class="quick-toggle quick-balance" data-nav="settings" title="${t('stars_balance')}">⭐ ${STATE.starsBalance.toLocaleString('en-US')}</div>
+      <div class="quick-toggle" data-cyclecurrency title="${t('settings_currency')}">${curLabel}</div>
+      <div class="quick-toggle" data-cyclelang title="${t('settings_language')}">${ICO.globe}${langLabel}</div>
+    </div>`;
+}
+
+function tabbar(){
+  const leftTabs = [
+    {id:"home", ic:ICO.home, label:t('tab_home')},
+    {id:"catalog", ic:ICO.grid, label:t('tab_catalog')},
+  ];
+  const rightTabs = [
+    {id:"cart", ic:ICO.cart, label:t('tab_cart'), badge:cartCount()},
+    {id:"profile", ic:ICO.user, label:t('tab_profile')},
+  ];
+  const renderTab = tb => `
+    <div class="tab ${STATE.screen===tb.id?'active':''}" data-nav="${tb.id}" data-tab="${tb.id}">
+      ${STATE.screen===tb.id?'<div class="tab-bubble"></div>':''}
+      ${tb.ic}
+      <span>${tb.label}</span>
+      ${tb.badge?`<div class="dot"></div>`:""}
+    </div>`;
+  const payBtn = `
+    <div class="tab tab-pay" data-pay-btn data-tab="pay" title="${t('tab_pay')}">
+      <div class="pay-btn">PAY</div>
+    </div>`;
+  return `<div class="tabbar">
+    ${leftTabs.map(renderTab).join("")}
+    ${payBtn}
+    ${rightTabs.map(renderTab).join("")}
+  </div>`;
+}
+
+function renderScreen(){
+  switch(STATE.screen){
+    case "home": return screenHome();
+    case "catalog": return screenCatalog();
+    case "detail": return screenDetail();
+    case "cart": return screenCart();
+    case "checkout-loading": return screenCheckoutLoading();
+    case "checkout-success": return screenCheckoutSuccess();
+    case "profile": return screenProfile();
+    case "orders": return screenOrders();
+    case "favorites": return screenFavorites();
+    case "settings": return screenSettings();
+    case "support": return screenSupport();
+    case "referral": return screenReferral();
+    case "notifications": return screenNotifications();
+    case "admin": return screenAdmin();
+    default: return screenHome();
+  }
+}
+
+/* ============================= CARD ============================= */
+function gameCard(g){
+  const fav = STATE.favorites.has(g.id);
+  return `
+  <div class="card" data-open="${g.id}">
+    <div class="cover" style="${coverStyle(g)}">
+      <div class="seal" style="--seal-a:${g.hue}deg"></div>
+      ${g.discountPct ? `<div class="badge sale">-${g.discountPct}%</div>` : g.isNew ? `<div class="badge new">New</div>` : g.isHot ? `<div class="badge hot">Hot</div>` : ""}
+      <div class="fav-heart" data-fav="${g.id}">${fav?ICO.heartFill:ICO.heart}</div>
+      <div class="cover-title">${g.title}</div>
+    </div>
+    <div class="meta">
+      <p class="g-title">${g.title}</p>
+      <p class="g-genre">${trGenre(g.genre)}</p>
+      <div class="price-row">
+        <span class="price ${g.discountPct?'sale':''}">${money(g.price)}</span>
+        ${g.orig?`<span class="price-old">${money(g.orig)}</span>`:""}
+        <span class="stars">${starIcon()} ${g.rating}</span>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ============================= HOME ============================= */
+function screenHome(){
+  const popular = [...GAMES].sort((a,b)=>b.sold-a.sold).slice(0,10);
+  const fresh = GAMES.filter(g=>g.isNew).slice(0,10);
+  const sale = GAMES.filter(g=>g.discountPct).sort((a,b)=>b.discountPct-a.discountPct).slice(0,10);
+  const recs = [...GAMES].sort(()=> rnd()-0.5).slice(0,6);
+  return `
+    ${searchBar()}
+    <div class="hero" data-nav="support">
+      <div class="hero-tag" style="display:inline-flex; align-items:center; gap:6px;"><span style="width:14px; height:14px; display:inline-flex;">${ICO.support}</span>${t('hero_tag')}</div>
+      <h2>${t('hero_title')}</h2>
+      <p>${t('hero_sub')}</p>
+      <button class="hero-btn">${t('hero_btn')} ${ICO.chev}</button>
+    </div>
+    ${genreChips()}
+    <div class="section" style="padding-top:10px;">
+      <div class="glass-strong" style="border-radius:var(--radius-lg); padding:18px;">
+        <div style="display:flex; align-items:center; gap:10px; margin-bottom:4px;">
+          <div style="width:34px; height:34px; border-radius:10px; background:linear-gradient(135deg,var(--violet),var(--cyan)); display:flex; align-items:center; justify-content:center; flex:0 0 auto;">${ICO.shield}</div>
+          <h3 class="section-title" style="font-size:15px;">${t('how_title')}</h3>
+        </div>
+        <p style="font-size:12px; color:var(--text-faint); margin:6px 0 12px;">${t('how_sub')}</p>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          ${[t('how_step1'),t('how_step2'),t('how_step3'),t('how_step4')].map((step,i)=>`
+            <div style="display:flex; gap:10px; align-items:flex-start;">
+              <div class="mono" style="width:22px; height:22px; border-radius:7px; background:var(--panel-strong); border:1px solid var(--border-strong); flex:0 0 auto; display:flex; align-items:center; justify-content:center; font-size:11px; font-weight:600; color:var(--cyan);">${i+1}</div>
+              <p style="font-size:12.5px; color:var(--text-dim); margin:0; line-height:1.5; padding-top:2px;">${step}</p>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    </div>
+    <div class="section">
+      <div class="section-head"><h3 class="section-title">${t('sec_popular')}</h3><span class="section-link" data-nav="catalog">${t('see_all')}</span></div>
+      <div class="rail">${popular.map(gameCard).join("")}</div>
+    </div>
+    <div class="section" style="padding-top:0;">
+      <div class="section-head"><h3 class="section-title">${t('sec_new')}</h3><span class="section-link" data-nav="catalog">${t('see_all')}</span></div>
+      <div class="rail">${fresh.map(gameCard).join("")}</div>
+    </div>
+    <div class="section" style="padding-top:0;">
+      <div class="section-head"><h3 class="section-title">${t('sec_sale')}</h3><span class="section-link" data-nav="catalog">${t('see_all')}</span></div>
+      <div class="rail">${sale.map(gameCard).join("")}</div>
+    </div>
+    <div class="section" style="padding-top:0;">
+      <div class="section-head"><h3 class="section-title">${t('sec_foryou')}</h3></div>
+      <div class="grid">${recs.map(gameCard).join("")}</div>
+    </div>
+  `;
+}
+
+function searchBar(){
+  return `
+  <div class="search-wrap">
+    <div class="search-bar">
+      ${ICO.search}
+      <input id="searchInput" placeholder="${t('search_ph')}" value="${STATE.search}">
+    </div>
+  </div>`;
+}
+function genreChips(){
+  const list = ["All", ...GENRES];
+  return `<div class="chip-row">
+    ${list.map(gname=>`<div class="chip glass ${STATE.activeGenre===gname?'active':''}" data-genre="${gname}">${trGenre(gname)}</div>`).join("")}
+  </div>`;
+}
+
+/* ============================= CATALOG ============================= */
+function screenCatalog(){
+  let list = GAMES;
+  if (STATE.activeGenre!=="All") list = list.filter(g=>g.genre===STATE.activeGenre);
+  if (STATE.search.trim()) list = list.filter(g=>g.title.toLowerCase().includes(STATE.search.trim().toLowerCase()));
+  return `
+    ${searchBar()}
+    ${genreChips()}
+    <div class="section">
+      <div class="section-head"><h3 class="section-title">${STATE.activeGenre==="All"?t('all_games'):trGenre(STATE.activeGenre)} <span style="color:var(--text-faint); font-weight:500;">(${list.length})</span></h3></div>
+      ${list.length? `<div class="grid">${list.map(gameCard).join("")}</div>` : `<div class="empty">${t('no_results')}</div>`}
+    </div>
+  `;
+}
+
+/* ============================= DETAIL ============================= */
+function screenDetail(){
+  const g = GAMES.find(x=>x.id===STATE.detailId);
+  if(!g) return `<div class="empty">${t('game_not_found')}</div>`;
+  const inCart = !!STATE.cart[g.id];
+  return `
+    <div class="detail-cover" style="${coverStyle(g)}">
+      <h1>${g.title}</h1>
+    </div>
+    <div class="pill-row">
+      <span class="pill glass">${trGenre(g.genre)}</span>
+      <span class="pill glass">${starIcon()} ${g.rating}</span>
+      ${g.discountPct?`<span class="pill" style="background:rgba(255,176,32,.16); color:var(--gold);">-${g.discountPct}% ${t('today_off')}</span>`:""}
+      ${g.isNew?`<span class="pill" style="background:rgba(76,217,232,.16); color:var(--cyan);">${t('new_release')}</span>`:""}
+    </div>
+    <div class="stat-row">
+      <div class="stat-box glass"><b>${g.sold.toLocaleString()}</b><span>${t('activated')}</span></div>
+      <div class="stat-box glass"><b>${t('delivery')}</b><span>${t('delivery_l')}</span></div>
+      <div class="stat-box glass"><b>${t('platform')}</b><span>${t('platform_l')}</span></div>
+    </div>
+    <div class="desc">${g.desc} ${t('instant_note')}</div>
+    <div class="sticky-buy">
+      <div class="glass" style="border-radius:14px; padding:10px 16px; display:flex; flex-direction:column; justify-content:center;">
+        <span style="font-size:9.5px; color:var(--text-faint); text-transform:uppercase;">${t('price_l')}</span>
+        <div style="display:flex; align-items:center; gap:6px;">
+          <span class="price ${g.discountPct?'sale':''}" style="font-size:16px;">${money(g.price)}</span>
+          ${g.orig?`<span class="price-old">${money(g.orig)}</span>`:""}
+        </div>
+      </div>
+      ${inCart
+        ? `<button class="btn btn-ghost" data-nav="catalog" style="flex:1;">${t('back_to_catalog')}</button>`
+        : `<button class="btn btn-primary" data-add="${g.id}" style="flex:1;">${t('add_to_cart')}</button>`
+      }
+    </div>
+  `;
+}
+
+/* ============================= CART ============================= */
+function screenCart(){
+  const ids = Object.keys(STATE.cart);
+  if(!ids.length) return `
+    <div class="section"><h2 style="font-size:20px; margin:6px 0 16px;">${t('cart_title')}</h2></div>
+    <div class="empty">${ICO.cart}<div style="margin-top:10px;">${t('cart_empty')}</div>
+    <div style="margin-top:18px;"><button class="btn btn-primary" data-nav="catalog" style="display:inline-flex; width:auto; padding:12px 22px;">${t('browse_games')}</button></div></div>`;
+  const rows = ids.map(id=>{
+    const g = GAMES.find(x=>x.id===id); const qty = STATE.cart[id];
+    return `
+    <div class="list-row glass">
+      <div class="thumb" style="${coverStyle(g)}">${initials(g.title)}</div>
+      <div class="info">
+        <b>${g.title}</b>
+        <span>${money(g.price)}</span>
+      </div>
+      <div class="qty-ctrl">
+        <button data-qty="${id}:-1">−</button>
+        <span class="mono" style="min-width:14px; text-align:center; font-size:13px;">${qty}</span>
+        <button data-qty="${id}:1">+</button>
+      </div>
+    </div>`;
+  }).join("");
+  const subtotal = ids.reduce((s,id)=> s + GAMES.find(x=>x.id===id).price*STATE.cart[id], 0);
+  const total = cartTotal();
+  return `
+    <div class="section">
+      <h2 style="font-size:20px; margin:6px 0 16px;">${t('cart_title')} <span style="color:var(--text-faint); font-weight:500; font-size:14px;">(${cartCount()})</span></h2>
+      ${rows}
+      <div class="glass-strong" style="border-radius:var(--radius-md); padding:16px; margin-top:14px;">
+        <div style="display:flex; justify-content:space-between; font-size:13px; color:var(--text-dim); margin-bottom:6px;"><span>${t('subtotal')}</span><span class="mono">${money(subtotal)}</span></div>
+        <div style="display:flex; justify-content:space-between; font-size:16px; font-weight:700; margin-top:8px; padding-top:10px; border-top:1px solid var(--border);"><span>${t('total')}</span><span class="mono">${money(total)}</span></div>
+      </div>
+      <button class="btn btn-primary" id="checkoutBtn" style="margin-top:16px;">${t('checkout')} · ${money(total)}</button>
+    </div>
+  `;
+}
+
+/* ============================= CHECKOUT FLOW ============================= */
+function screenCheckoutLoading(){
+  return `<div class="center-screen">
+    <div class="spinner"></div>
+    <h3 style="margin:0 0 6px;">${t('processing')}</h3>
+    <p style="color:var(--text-faint); font-size:13px; max-width:260px;">${t('processing_sub')}</p>
+  </div>`;
+}
+function activationGuideCard(){
+  return `
+    <div class="glass-strong fade-up-in" style="border-radius:var(--radius-lg); padding:18px; margin-top:20px; text-align:left; animation-delay:1.6s;">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+        <div style="width:32px; height:32px; border-radius:10px; background:linear-gradient(135deg,var(--gold),#c98a0e); display:flex; align-items:center; justify-content:center; flex:0 0 auto;">🔑</div>
+        <h3 style="font-size:14.5px; margin:0;">${t('guide_title')}</h3>
+      </div>
+      <p style="font-size:12px; color:var(--text-dim); margin:0 0 12px; line-height:1.55;">${t('guide_intro')}</p>
+      <div style="display:flex; flex-direction:column; gap:9px;">
+        <div style="display:flex; gap:8px; align-items:flex-start;"><span style="flex:0 0 auto;">🎮</span><p style="margin:0; font-size:12px; color:var(--text-dim); line-height:1.5;">${t('guide_rule1')}</p></div>
+        <div style="display:flex; gap:8px; align-items:flex-start;"><span style="flex:0 0 auto;">🚫</span><p style="margin:0; font-size:12px; color:var(--text-dim); line-height:1.5;">${t('guide_rule2')}</p></div>
+        <div style="display:flex; gap:8px; align-items:flex-start;"><span style="flex:0 0 auto;">⏱️</span><p style="margin:0; font-size:12px; color:var(--text-dim); line-height:1.5;">${t('guide_rule3')}</p></div>
+        <div style="display:flex; gap:8px; align-items:flex-start;"><span style="flex:0 0 auto;">⚠️</span><p style="margin:0; font-size:12px; color:var(--red); line-height:1.5;">${t('guide_rule4')}</p></div>
+      </div>
+    </div>
+  `;
+}
+
+function screenCheckoutSuccess(){
+  const order = STATE.orders[0];
+  const sparkGlyphs = ["⭐","✦","✧","✨"];
+  let sparks = "";
+  for(let i=0;i<10;i++){
+    const sx = 30 + Math.random()*40; // 30%-70% horizontal spread
+    const size = 12 + Math.random()*10;
+    const delay = (Math.random()*0.9).toFixed(2);
+    const glyph = sparkGlyphs[i % sparkGlyphs.length];
+    sparks += `<span class="spark" style="--sx:${sx}%; --ssize:${size}px; --sdelay:${delay}s;">${glyph}</span>`;
+  }
+  return `<div class="center-screen success-screen">
+    <div class="success-glow"></div>
+    <div class="success-particles">${sparks}</div>
+    <div class="check-circle"><svg style="width:36px;height:36px;" viewBox="0 0 24 24" fill="none" stroke="#0B2A1D" stroke-width="3"><path d="M4 12l6 6L20 6"/></svg></div>
+    <h2 class="fade-up-in" style="margin:0 0 8px; animation-delay:1s;">${t('purchase_complete')}</h2>
+    <p class="fade-up-in" style="color:var(--text-dim); font-size:13.5px; max-width:280px; margin-bottom:26px; animation-delay:1.15s;">${t('order_label')} <span class="mono">${order?order.id:''}</span> ${t('order_confirmed')}</p>
+    <div class="fade-up-in" style="width:100%; display:flex; flex-direction:column; gap:10px; animation-delay:1.4s;">
+      <button class="btn btn-light" data-nav="orders">${t('view_order')}</button>
+      <button class="btn btn-ghost" data-nav="home">${t('continue_shopping')}</button>
+    </div>
+    ${activationGuideCard()}
+  </div>`;
+}
+
+/* ============================= PROFILE ============================= */
+function screenProfile(){
+  const u = STATE.user;
+  const admin = isAdmin(u);
+  const refLink = `https://t.me/${CONFIG.botUsername}?start=ref${u.id}`;
+  return `
+    <div class="profile-head">
+      <div class="avatar">${initials(u.firstName+" "+u.lastName)}</div>
+      <div>
+        <p class="profile-name">${u.firstName} ${u.lastName}</p>
+        <p class="profile-sub">${u.username || "Telegram user"} · ID ${u.id}</p>
+      </div>
+    </div>
+    <div class="ref-card" data-nav="referral">
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+        <div style="width:34px; height:34px; border-radius:10px; background:rgba(255,255,255,.14); display:flex; align-items:center; justify-content:center; flex:0 0 auto;">${ICO.link}</div>
+        <div><b style="display:block; font-size:14px;">${t('referral_title')}</b><span style="font-size:11px; color:var(--text-dim);">${t('referral_card_sub')}</span></div>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <div style="flex:1;"><b style="display:block; font-size:18px; font-family:'Space Grotesk';">${STATE.referral.invited}</b><span style="font-size:10px; color:var(--text-faint); text-transform:uppercase;">${t('referral_invited')}</span></div>
+        <div style="flex:1;"><b style="display:block; font-size:18px; font-family:'Space Grotesk'; color:var(--gold);">${money(STATE.referral.earnedStars/RATES.STARS)}</b><span style="font-size:10px; color:var(--text-faint); text-transform:uppercase;">${t('referral_earned')}</span></div>
+      </div>
+    </div>
+    <div class="section" style="padding-top:0;">
+      <div class="menu-row glass" data-nav="orders"><div class="ic">${ICO.box}</div><b>${t('order_history')}</b><span style="color:var(--text-faint); font-size:12px;">${STATE.orders.length}</span></div>
+      <div class="menu-row glass" data-nav="favorites"><div class="ic">${ICO.heart}</div><b>${t('favorites')}</b><span style="color:var(--text-faint); font-size:12px;">${STATE.favorites.size}</span></div>
+      <div class="menu-row glass" data-nav="notifications"><div class="ic">${ICO.bell}</div><b>${t('notifications')}</b></div>
+      <div class="menu-row glass" data-nav="settings"><div class="ic">${ICO.cog}</div><b>${t('settings')}</b></div>
+      <div class="menu-row glass" data-nav="support"><div class="ic">${ICO.support}</div><b>${t('support')}</b></div>
+      ${admin ? `
+      <div class="divider"></div>
+      <div class="menu-row glass" data-nav="admin"><div class="ic">${ICO.shield}</div><b>${t('admin_panel')}</b></div>
+      ` : ""}
+    </div>
+  `;
+}
+
+function screenBack(title, content){
+  return `
+    <div style="display:flex; align-items:center; gap:10px; padding:6px 18px 18px;">
+      <div class="icon-btn" data-nav="profile">${ICO.back}</div>
+      <h2 style="font-size:18px; margin:0;">${title}</h2>
+    </div>
+    ${content}
+  `;
+}
+
+function screenOrders(){
+  if(!STATE.orders.length) return screenBack(t('order_history'), `<div class="empty">${t('no_orders')}</div>`);
+  return screenBack(t('order_history'), `<div class="section" style="padding-top:0;">
+    ${STATE.orders.map(o=>`
+      <div class="glass" style="border-radius:var(--radius-md); padding:14px; margin-bottom:12px;">
+        <div style="display:flex; justify-content:space-between; margin-bottom:10px;">
+          <span class="mono" style="font-size:12px; color:var(--text-dim);">${o.id}</span>
+          <span style="font-size:11px; color:var(--green); font-weight:600;">✓ ${t('delivered')}</span>
+        </div>
+        ${o.items.map(it=>`<div style="display:flex; justify-content:space-between; font-size:13px; padding:4px 0;"><span>${it.title} ×${it.qty}</span><span class="mono">${money(it.price*it.qty)}</span></div>`).join("")}
+        <div style="display:flex; justify-content:space-between; font-weight:700; margin-top:8px; padding-top:8px; border-top:1px solid var(--border);"><span>${t('total')}</span><span class="mono">${money(o.total)}</span></div>
+        <div style="margin-top:10px; padding:10px 12px; border-radius:10px; background:rgba(76,217,232,.08); font-size:11.5px; color:var(--text-dim);">
+          🔑 ${t('key_note')}
+        </div>
+      </div>
+    `).join("")}
+  </div>`);
+}
+
+function screenFavorites(){
+  const favs = GAMES.filter(g=>STATE.favorites.has(g.id));
+  if(!favs.length) return screenBack(t('favorites'), `<div class="empty">${t('no_favorites')}</div>`);
+  return screenBack(t('favorites'), `<div class="section" style="padding-top:0;"><div class="grid">${favs.map(gameCard).join("")}</div></div>`);
+}
+
+function screenReferral(){
+  const u = STATE.user;
+  const code = STATE.referral.code || (u.id ? "OA"+String(u.id).slice(-6) : "——");
+  const refLink = `https://t.me/${CONFIG.botUsername}?startapp=${code}`;
+  const reward = money(CONFIG.referralRewardStars/RATES.STARS);
+  return screenBack(t('referral_title'), `<div class="section" style="padding-top:0;">
+    <div class="glass-strong" style="border-radius:var(--radius-lg); padding:18px; margin-bottom:16px; text-align:center;">
+      <div style="width:52px; height:52px; border-radius:16px; margin:0 auto 12px; background:linear-gradient(135deg,var(--violet),var(--cyan)); display:flex; align-items:center; justify-content:center;"><span style="display:inline-flex; width:26px; height:26px;">${ICO.link}</span></div>
+      <h3 style="font-size:16px; margin:0 0 6px;">${t('referral_hero_title').split('{reward}').join(reward)}</h3>
+      <p style="font-size:12.5px; color:var(--text-dim); margin:0;">${t('referral_hero_sub')}</p>
+    </div>
+    <div style="display:flex; gap:10px; margin-bottom:16px;">
+      <div class="stat-box glass" style="flex:1;"><b>${STATE.referral.invited}</b><span>${t('referral_invited')}</span></div>
+      <div class="stat-box glass" style="flex:1;"><b style="color:var(--gold);">${money(STATE.referral.earnedStars/RATES.STARS)}</b><span>${t('referral_earned')}</span></div>
+    </div>
+    <div class="field">
+      <label>${t('referral_your_link')}</label>
+      <div style="display:flex; gap:8px;">
+        <input readonly value="${refLink}" style="flex:1;">
+        <button class="btn btn-primary btn-sm" id="copyRefBtn" data-link="${refLink}">${ICO.copy} ${t('copy')}</button>
+      </div>
+    </div>
+    <div class="glass" style="border-radius:var(--radius-md); padding:14px; margin-top:6px;">
+      <b style="display:block; font-size:12.5px; margin-bottom:8px;">${t('referral_how_title')}</b>
+      <div style="display:flex; flex-direction:column; gap:8px;">
+        <div style="display:flex; gap:8px;"><span class="mono" style="color:var(--cyan); font-size:11px;">1.</span><p style="margin:0; font-size:12px; color:var(--text-dim);">${t('referral_step1')}</p></div>
+        <div style="display:flex; gap:8px;"><span class="mono" style="color:var(--cyan); font-size:11px;">2.</span><p style="margin:0; font-size:12px; color:var(--text-dim);">${t('referral_step2').split('{reward}').join(reward)}</p></div>
+      </div>
+    </div>
+    <p style="font-size:10.5px; color:var(--text-faint); padding:10px 4px 0;">${t('referral_fineprint')}</p>
+  </div>`);
+}
+
+function screenNotifications(){
+  const reward = money(CONFIG.referralRewardUsd);
+  const itemsByLang = {
+    ru: [
+      {t:"Пополнение каталога новыми играми", s:"На этой неделе добавлено 6 новых тайтлов.", ic:ICO.tag},
+      {t:"Заказ OA-482910 доставлен", s:"Ключ Elden Ring добавлен в вашу библиотеку.", ic:ICO.box},
+      {t:`Друг принял приглашение — вы получили ${reward}`, s:"Спасибо, что рассказали друзьям об Offline Activation.", ic:ICO.link},
+    ],
+    zh: [
+      {t:"目录新增多款游戏", s:"本周新增 6 款新游戏。", ic:ICO.tag},
+      {t:"订单 OA-482910 已发货", s:"Elden Ring 密钥已添加到您的游戏库。", ic:ICO.box},
+      {t:`好友已加入 — 您获得了 ${reward}`, s:"感谢您向朋友推荐 Offline Activation。", ic:ICO.link},
+    ],
+    en: [
+      {t:"New titles added to the catalog", s:"6 new games were added this week.", ic:ICO.tag},
+      {t:"Your order OA-482910 was delivered", s:"Elden Ring key added to your library.", ic:ICO.box},
+      {t:`A friend joined — you earned ${reward}`, s:"Thanks for sharing Offline Activation.", ic:ICO.link},
+    ],
+  };
+  const items = itemsByLang[STATE.lang] || itemsByLang.en;
+  return screenBack(t('notifications'), `<div class="section" style="padding-top:0;">
+    ${items.map(n=>`<div class="menu-row glass"><div class="ic">${n.ic}</div><div style="flex:1;"><b style="display:block;">${n.t}</b><span style="font-size:11.5px; color:var(--text-faint);">${n.s}</span></div></div>`).join("")}
+  </div>`);
+}
+
+function screenSettings(){
+  const langs = [{id:"en", label:"English"}, {id:"ru", label:"Русский"}, {id:"zh", label:"中文"}];
+  const currencies = [{id:"STARS", label:"⭐ Stars"}, {id:"USD", label:"$ USD"}, {id:"EUR", label:"€ EUR"}, {id:"RUB", label:"₽ RUB"}];
+  return screenBack(t('settings'), `<div class="section" style="padding-top:0;">
+    <div class="glass" style="border-radius:var(--radius-md); padding:14px; margin-bottom:12px;">
+      <div style="font-size:11.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.03em; margin-bottom:10px;">${t('settings_language')}</div>
+      <div style="display:flex; gap:8px;">
+        ${langs.map(l=>`<div class="chip ${STATE.lang===l.id?'active':'glass'}" data-setlang="${l.id}" style="flex:1; text-align:center;">${l.label}</div>`).join("")}
+      </div>
+    </div>
+    <div class="glass" style="border-radius:var(--radius-md); padding:14px; margin-bottom:12px;">
+      <div style="font-size:11.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.03em; margin-bottom:10px;">${t('settings_currency')}</div>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        ${currencies.map(c=>`<div class="chip ${STATE.currency===c.id?'active':'glass'}" data-setcurrency="${c.id}" style="flex:1 1 auto; text-align:center; min-width:70px;">${c.label}</div>`).join("")}
+      </div>
+      <div style="font-size:10.5px; color:var(--text-faint); margin-top:10px;">${t('settings_currency_hint')}</div>
+    </div>
+    <div class="menu-row glass"><div class="ic">${ICO.card}</div><b>${t('settings_payment')}</b><span style="color:var(--gold); font-size:12px;">${t('in_development')}</span></div>
+    <div class="menu-row glass" data-toggle-push style="cursor:pointer;"><div class="ic">${ICO.bell}</div><b>${t('settings_push')}</b><span style="color:${STATE.pushEnabled?'var(--green)':'var(--text-faint)'}; font-size:12px;">${STATE.pushEnabled?t('settings_on'):t('settings_off')}</span></div>
+    <div class="menu-row glass" data-toggle-theme style="cursor:pointer;"><div class="ic">${ICO.moon}</div><b>${t('settings_theme')}</b><span style="color:var(--text-faint); font-size:12px;">${STATE.theme==='light'?t('settings_light'):t('settings_dark')}</span></div>
+    <p style="font-size:11.5px; color:var(--text-faint); padding:10px 4px;">${t('settings_hint')}</p>
+  </div>`);
+}
+
+function screenSupport(){
+  return screenBack(t('support'), `<div class="section" style="padding-top:0;">
+    <div class="glass" style="border-radius:var(--radius-md); padding:16px; margin-bottom:14px;">
+      <b style="display:block; margin-bottom:6px;">${t('support_title')}</b>
+      <p style="font-size:12.5px; color:var(--text-dim); margin:0;">${t('support_sub')}</p>
+    </div>
+    <div class="support-btn" data-support-link>${ICO.support}${t('support_msg')}</div>
+  </div>`);
+}
+
+/* ============================= ADMIN ============================= */
+function screenAdmin(){
+  if (!isAdmin(STATE.user)) {
+    return `
+      <div style="display:flex; align-items:center; gap:10px; padding:calc(14px + var(--safe-top)) 18px 14px;">
+        <div class="icon-btn" data-nav="profile">${ICO.back}</div>
+        <h2 style="font-size:18px; margin:0;">${t('admin_panel')}</h2>
+      </div>
+      <div class="empty">${t('admin_restricted')}</div>
+    `;
+  }
+  const tabs = [
+    {id:"games", label:t('admin_catalog')},
+    {id:"orders", label:t('admin_orders')},
+    {id:"users", label:t('admin_users')},
+    {id:"stats", label:t('admin_stats')},
+  ];
+  return `
+    <div style="display:flex; align-items:center; gap:10px; padding:calc(14px + var(--safe-top)) 18px 14px;">
+      <div class="icon-btn" data-nav="profile">${ICO.back}</div>
+      <h2 style="font-size:18px; margin:0;">${t('admin_panel')}</h2>
+    </div>
+    <div class="admin-tabs">
+      ${tabs.map(tb=>`<div class="chip glass ${STATE.adminTab===tb.id?'active':''}" data-admintab="${tb.id}">${tb.label}</div>`).join("")}
+    </div>
+    <div class="section" style="padding-top:0;">${adminTabContent()}</div>
+  `;
+}
+
+function adminTabContent(){
+  if (STATE.adminTab==="stats") {
+    const revenue = STATE.orders.reduce((s,o)=>s+o.total,0) + 812.40;
+    const maxSold = Math.max(...GAMES.map(g=>g.sold));
+    const topGenres = GENRES.map(gn=>({gn, count: GAMES.filter(g=>g.genre===gn).length}));
+    return `
+      <div class="stat-grid">
+        <div class="stat-card glass"><b>${money(revenue)}</b><span>${t('total_revenue')}</span></div>
+        <div class="stat-card glass"><b>${STATE.orders.length + 214}</b><span>${t('total_orders')}</span></div>
+        <div class="stat-card glass"><b>${GAMES.length}</b><span>${t('games_in_catalog')}</span></div>
+        <div class="stat-card glass"><b>${STATE.users.length}</b><span>${t('registered_users')}</span></div>
+      </div>
+      <div class="section-head" style="padding:0 0 8px;"><h3 class="section-title" style="font-size:14px;">${t('titles_by_genre')}</h3></div>
+      <div class="bar-chart glass" style="border-radius:var(--radius-md); padding:14px 10px;">
+        ${topGenres.map(tg=>`<div class="bar" style="height:${(tg.count/Math.max(...topGenres.map(x=>x.count)))*80+6}px" title="${tg.gn}"></div>`).join("")}
+      </div>
+      <div style="display:flex; justify-content:space-between; padding:0 6px; font-size:8.5px; color:var(--text-faint);">
+        ${topGenres.map(tg=>`<span style="flex:1; text-align:center;">${trGenre(tg.gn).slice(0,3)}</span>`).join("")}
+      </div>
+      <div class="glass" style="border-radius:var(--radius-md); padding:14px; margin-top:16px; border-color:rgba(255,176,32,.3);">
+        <b style="display:block; font-size:12.5px; margin-bottom:4px; color:var(--gold);">🧪 ${t('admin_testing_title')}</b>
+        <p style="font-size:11px; color:var(--text-faint); margin:0 0 10px;">${t('admin_testing_sub')}</p>
+        <div style="display:flex; gap:8px;">
+          <input id="grantAmountInput" type="number" min="1" step="10" value="500" style="flex:1;">
+          <button class="btn btn-ghost btn-sm" id="grantBalanceBtn">${t('admin_testing_btn')}</button>
+        </div>
+      </div>
+    `;
+  }
+  if (STATE.adminTab==="orders") {
+    if(!STATE.orders.length) return `<div class="empty">${t('no_orders_session')}</div>`;
+    return STATE.orders.map(o=>`
+      <div class="admin-row glass" style="align-items:flex-start;">
+        <div style="flex:1;">
+          <b class="mono" style="font-size:12.5px;">${o.id}</b>
+          <div style="font-size:11px; color:var(--text-faint); margin-top:2px;">${o.items.length} · ${money(o.total)}</div>
+        </div>
+        <span style="font-size:10.5px; color:var(--green); font-weight:700;">${t('paid')}</span>
+      </div>
+    `).join("");
+  }
+  if (STATE.adminTab==="users") {
+    return STATE.users.map(u=>`
+      <div class="admin-row glass">
+        <div class="thumb" style="width:36px; height:36px; background:linear-gradient(135deg,var(--violet),var(--cyan)); display:flex; align-items:center; justify-content:center; border-radius:10px; font-weight:700; font-size:11px; color:#0B0C10;">${initials(u.name)}</div>
+        <div style="flex:1;"><b style="font-size:13px; display:block;">${u.name}</b><span style="font-size:11px; color:var(--text-faint);">${u.handle} · ${u.orders}</span></div>
+        <span class="mono" style="font-size:12px; color:var(--gold);">${money(u.spent)}</span>
+      </div>
+    `).join("");
+  }
+  // games tab
+  return `
+    <button class="btn btn-primary btn-sm" id="addGameBtn" style="margin-bottom:14px;">${ICO.plus} ${t('add_new_game')}</button>
+    ${GAMES.map(g=>`
+      <div class="admin-row glass">
+        <div class="thumb" style="width:36px; height:36px; border-radius:9px; ${coverStyle(g)}"></div>
+        <div style="flex:1; min-width:0;">
+          <b style="font-size:12.5px; display:block; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${g.title}</b>
+          <span style="font-size:10.5px; color:var(--text-faint);">${trGenre(g.genre)}</span>
+        </div>
+        <input type="number" step="0.01" value="${g.price}" data-priceedit="${g.id}">
+        <div class="tiny-btn" data-editgame="${g.id}">✎</div>
+        <div class="tiny-btn" data-delgame="${g.id}">${ICO.trash}</div>
+      </div>
+    `).join("")}
+  `;
+}
+
+/* ============================= EVENTS ============================= */
+const LANG_CYCLE = ["en","ru","zh"];
+const CURRENCY_CYCLE = ["STARS","USD","EUR","RUB"];
+
+function bindEvents(){
+  app.querySelectorAll("[data-nav]").forEach(el=>{
+    el.addEventListener("click", ()=>{
+      const target = el.dataset.nav;
+      if (target==="back") { go(STATE.screen==="detail" ? (STATE.prevScreen||"home") : "home"); return; }
+      go(target);
+    });
+  });
+  // central PAY button: opens the "Top up balance" sheet
+  app.querySelectorAll("[data-pay-btn]").forEach(el=>{
+    el.addEventListener("click", openTopUpSheet);
+  });
+  // Telegram-style tap "bubble" ripple on bottom tab bar icons
+  app.querySelectorAll("[data-tab]").forEach(el=>{
+    el.addEventListener("pointerdown", (e)=>{
+      const rect = el.getBoundingClientRect();
+      const ripple = document.createElement("div");
+      ripple.className = "tab-ripple";
+      const size = Math.max(rect.width, rect.height) * 1.1;
+      ripple.style.width = size+"px";
+      ripple.style.height = size+"px";
+      ripple.style.left = ((e.clientX ?? rect.left+rect.width/2) - rect.left)+"px";
+      ripple.style.top = ((e.clientY ?? rect.top+rect.height/2) - rect.top)+"px";
+      el.appendChild(ripple);
+      ripple.addEventListener("animationend", ()=> ripple.remove());
+    });
+  });
+  app.querySelectorAll("[data-open]").forEach(el=>{
+    el.addEventListener("click", ()=>{ STATE.prevScreen = STATE.screen; go("detail", {detailId: el.dataset.open}); });
+  });
+  app.querySelectorAll("[data-genre]").forEach(el=>{
+    el.addEventListener("click", ()=>{ STATE.activeGenre = el.dataset.genre; go("catalog"); });
+  });
+  app.querySelectorAll("[data-fav]").forEach(el=>{
+    el.addEventListener("click", (e)=>{ e.stopPropagation(); toggleFav(el.dataset.fav); render(); });
+  });
+  app.querySelectorAll("[data-toggle-fav]").forEach(el=>{
+    el.addEventListener("click", ()=>{ toggleFav(el.dataset.toggleFav); render(); });
+  });
+  app.querySelectorAll("[data-add]").forEach(el=>{
+    el.addEventListener("click", ()=>{
+      const id = el.dataset.add;
+      STATE.cart[id] = (STATE.cart[id]||0)+1;
+      toast(t('toast_added'));
+      render();
+    });
+  });
+  app.querySelectorAll("[data-qty]").forEach(el=>{
+    el.addEventListener("click", ()=>{
+      const [id, d] = el.dataset.qty.split(":");
+      STATE.cart[id] = (STATE.cart[id]||0) + parseInt(d);
+      if (STATE.cart[id]<=0) delete STATE.cart[id];
+      render();
+    });
+  });
+
+  // --- working live search: filters as you type, jumps to Catalog automatically ---
+  const searchInput = $("#searchInput");
+  if (searchInput) {
+    // restore focus + caret after a debounce-triggered re-render
+    if (document.activeElement !== searchInput && STATE._focusSearch) {
+      searchInput.focus();
+      try{ searchInput.setSelectionRange(STATE._searchCaret||searchInput.value.length, STATE._searchCaret||searchInput.value.length); }catch(e){}
+      STATE._focusSearch = false;
+    }
+    searchInput.addEventListener("input", e=>{
+      STATE.search = e.target.value;
+      STATE._searchCaret = e.target.selectionStart;
+      clearTimeout(bindEvents._searchTimer);
+      bindEvents._searchTimer = setTimeout(()=>{
+        STATE._focusSearch = true;
+        if (STATE.screen !== "catalog") STATE.screen = "catalog";
+        render();
+      }, 180);
+    });
+    searchInput.addEventListener("keyup", e=>{
+      if(e.key==="Enter"){ STATE.search = e.target.value; STATE._focusSearch=false; go("catalog"); }
+    });
+  }
+
+  const checkoutBtn = $("#checkoutBtn");
+  if (checkoutBtn) checkoutBtn.addEventListener("click", doCheckout);
+
+  // quick toggles: language & currency (topbar pills, visible everywhere)
+  app.querySelectorAll("[data-cyclelang]").forEach(el=>{
+    el.addEventListener("click", ()=>{
+      const i = LANG_CYCLE.indexOf(STATE.lang);
+      STATE.lang = LANG_CYCLE[(i+1) % LANG_CYCLE.length];
+      render();
+    });
+  });
+  app.querySelectorAll("[data-cyclecurrency]").forEach(el=>{
+    el.addEventListener("click", ()=>{
+      const i = CURRENCY_CYCLE.indexOf(STATE.currency);
+      STATE.currency = CURRENCY_CYCLE[(i+1) % CURRENCY_CYCLE.length];
+      render();
+    });
+  });
+  // settings screen: explicit language & currency pickers
+  app.querySelectorAll("[data-setlang]").forEach(el=>{
+    el.addEventListener("click", ()=>{ STATE.lang = el.dataset.setlang; render(); });
+  });
+  app.querySelectorAll("[data-setcurrency]").forEach(el=>{
+    el.addEventListener("click", ()=>{ STATE.currency = el.dataset.setcurrency; render(); });
+  });
+  const pushRow = $("[data-toggle-push]");
+  if (pushRow) pushRow.addEventListener("click", ()=>{ STATE.pushEnabled = !STATE.pushEnabled; render(); });
+  const themeRow = $("[data-toggle-theme]");
+  if (themeRow) themeRow.addEventListener("click", ()=>{
+    STATE.theme = STATE.theme === "light" ? "dark" : "light";
+    document.body.classList.toggle("light-theme", STATE.theme === "light");
+    render();
+  });
+  // referral: copy link
+  const copyRefBtn = $("#copyRefBtn");
+  if (copyRefBtn) copyRefBtn.addEventListener("click", ()=>{
+    const link = copyRefBtn.dataset.link;
+    try{
+      navigator.clipboard.writeText(link);
+    }catch(e){}
+    toast(t('toast_ref_copied'));
+  });
+  // support: open real Telegram chat with the store's support account
+  app.querySelectorAll("[data-support-link]").forEach(el=>{
+    el.addEventListener("click", ()=> openTelegramLink(CONFIG.supportTelegramUsername));
+  });
+
+  // admin
+  app.querySelectorAll("[data-admintab]").forEach(el=>{
+    el.addEventListener("click", ()=>{ STATE.adminTab = el.dataset.admintab; render(); });
+  });
+  app.querySelectorAll("[data-delgame]").forEach(el=>{
+    el.addEventListener("click", async ()=>{
+      const id = el.dataset.delgame;
+      if (isBackendConfigured()) {
+        try{
+          await adminApiCall("DELETE", `/api/admin/games/${id}`, {});
+          const idx = GAMES.findIndex(g=>g.id===id);
+          if(idx>-1) GAMES.splice(idx,1);
+          toast(t('toast_game_removed'));
+          render();
+        }catch(err){ toast(err.message || t('toast_payment_fail')); }
+      } else {
+        const idx = GAMES.findIndex(g=>g.id===id);
+        if(idx>-1){ GAMES.splice(idx,1); toast(t('toast_game_removed')); render(); }
+      }
+    });
+  });
+  app.querySelectorAll("[data-priceedit]").forEach(el=>{
+    el.addEventListener("change", async ()=>{
+      const id = el.dataset.priceedit;
+      const g = GAMES.find(x=>x.id===id);
+      const v = parseFloat(el.value); if(isNaN(v) || v<=0) return;
+      g.price = v; // optimistic local update so the UI feels instant
+      if (isBackendConfigured()) {
+        try{ await adminApiCall("PUT", `/api/admin/games/${id}`, {priceUsd:v}); toast(t('toast_price_updated')); }
+        catch(err){ toast(err.message || t('toast_payment_fail')); }
+      } else {
+        toast(t('toast_price_updated'));
+      }
+    });
+  });
+  app.querySelectorAll("[data-editgame]").forEach(el=>{
+    el.addEventListener("click", ()=> openEditGameSheet(el.dataset.editgame));
+  });
+  const addGameBtn = $("#addGameBtn");
+  if(addGameBtn) addGameBtn.addEventListener("click", ()=> openEditGameSheet(null));
+  // GRANT-BALANCE-TESTING — temporary admin self-credit tool, remove before real launch.
+  const grantBalanceBtn = $("#grantBalanceBtn");
+  if (grantBalanceBtn) grantBalanceBtn.addEventListener("click", async ()=>{
+    const amount = parseInt($("#grantAmountInput").value, 10);
+    if (!amount || amount<=0) return;
+    if (isRealPaymentsAvailable()) {
+      try{
+        const { balanceStars } = await adminApiCall("POST", "/api/admin/grant-balance", { amountStars: amount });
+        STATE.starsBalance = balanceStars;
+        toast(t('toast_topup_confirmed'));
+        render();
+      }catch(err){ toast(err.message || t('toast_payment_fail')); }
+    } else {
+      // Preview / no real Telegram+backend: simulate locally, same as every other payment button.
+      STATE.starsBalance += amount;
+      toast(t('toast_topup_confirmed'));
+      render();
+    }
+  });
+}
+
+function toggleFav(id){
+  if (STATE.favorites.has(id)) STATE.favorites.delete(id); else STATE.favorites.add(id);
+}
+
+async function doCheckout(){
+  if(!Object.keys(STATE.cart).length) return;
+
+  const items = Object.keys(STATE.cart).map(id=>{
+    const g = GAMES.find(x=>x.id===id);
+    return {id:g.id, title:g.title, qty:STATE.cart[id], price:g.price};
+  });
+  const total = cartTotal();
+  const neededStars = cartTotalStars();
+
+  // Cart purchases now spend from the in-app balance (topped up via the PAY
+  // button) instead of creating a fresh Stars invoice per order.
+  if (STATE.starsBalance < neededStars) {
+    const shortfall = Math.max(50, neededStars - STATE.starsBalance);
+    toast(t('toast_insufficient_balance'));
+    openTopUpSheet(shortfall);
+    return;
+  }
+
+  go("checkout-loading");
+
+  if (isRealPaymentsAvailable()) {
+    try{
+      const tg = window.Telegram.WebApp;
+      const res = await fetch(`${CONFIG.apiBaseUrl}/api/checkout-from-balance`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ initData: tg.initData, items: items.map(i=>({id:i.id, qty:i.qty})) }),
+      });
+      if (!res.ok) {
+        const e = await res.json().catch(()=>({}));
+        if (res.status === 402) {
+          // balance changed server-side since we last checked (e.g. another
+          // device spent it) — send them to top up instead of failing silently
+          toast(t('toast_insufficient_balance'));
+          go("cart");
+          openTopUpSheet(Math.max(50, neededStars - (e.balanceStars||0)));
+          return;
+        }
+        throw new Error(e.error || `Server error (${res.status})`);
+      }
+      const data = await res.json();
+      STATE.starsBalance = data.balanceStars;
+      STATE.orders.unshift({id:data.orderId, items, total, date:new Date().toISOString()});
+      STATE.cart = {};
+      go("checkout-success");
+    }catch(err){
+      console.error("Balance checkout failed:", err);
+      toast(err.message || t('toast_payment_fail'));
+      go("cart");
+    }
+    return;
+  }
+
+  // Preview / outside Telegram: simulate so the flow is still testable.
+  await wait(1200);
+  STATE.starsBalance -= neededStars;
+  const orderId = "OA-" + Math.floor(100000+Math.random()*900000);
+  STATE.orders.unshift({id:orderId, items, total, date:new Date().toISOString()});
+  STATE.cart = {};
+  go("checkout-success");
+}
+
+/* ---------------- top-up balance sheet ---------------- */
+const TOPUP_PRESETS_STARS = [100, 500, 1000, 2500, 5000];
+
+function openTopUpSheet(suggestedAmount){
+  let selectedAmount = suggestedAmount || TOPUP_PRESETS_STARS[1]; // default 500, or the shortfall if redirected here
+  const isCustomSuggestion = !!suggestedAmount && !TOPUP_PRESETS_STARS.includes(suggestedAmount);
+  renderSheetContent();
+
+  function renderSheetContent(){
+    openSheet(`
+      <h3 style="margin:0 0 4px;">${t('topup_title')}</h3>
+      <p style="font-size:12px; color:var(--text-faint); margin:0 0 16px;">${t('topup_current_balance')}: <b style="color:var(--gold);">⭐ ${STATE.starsBalance.toLocaleString('en-US')}</b></p>
+      <div style="display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px;">
+        ${TOPUP_PRESETS_STARS.map(a=>`
+          <div class="chip ${selectedAmount===a?'active':'glass'}" data-topup-preset="${a}" style="flex:1 1 auto; text-align:center; min-width:70px;">⭐ ${a.toLocaleString('en-US')}</div>
+        `).join("")}
+      </div>
+      <div class="field">
+        <label>${t('topup_custom_label')}</label>
+        <input id="topupCustomInput" type="number" min="50" step="10" placeholder="${t('topup_custom_ph')}" value="${isCustomSuggestion?selectedAmount:''}">
+      </div>
+      <div class="glass" style="border-radius:12px; padding:12px 14px; margin-bottom:16px; font-size:12px; color:var(--text-dim);">
+        ${t('topup_selected_label')}: <b class="mono" style="color:var(--text);">⭐ <span id="topupAmountPreview">${selectedAmount.toLocaleString('en-US')}</span></b>
+        <span class="mono" style="color:var(--text-faint);"> (≈ ${money(selectedAmount/RATES.STARS)})</span>
+      </div>
+      <button class="btn btn-primary" id="topupStarsBtn" style="margin-bottom:10px;">⭐ ${t('topup_pay_stars')}</button>
+      <button class="btn btn-ghost" id="topupCryptoBtn" disabled style="opacity:.5; cursor:not-allowed;">💎 ${t('topup_pay_crypto')} — ${t('in_development')}</button>
+      <p style="font-size:10.5px; color:var(--text-faint); text-align:center; margin-top:12px;">${t('topup_footnote')}</p>
+    `);
+    bindSheetEvents();
+  }
+
+  function bindSheetEvents(){
+    $("#sheet").querySelectorAll("[data-topup-preset]").forEach(el=>{
+      el.addEventListener("click", ()=>{
+        selectedAmount = parseInt(el.dataset.topupPreset, 10);
+        $("#topupCustomInput").value = "";
+        updatePreview();
+        $("#sheet").querySelectorAll("[data-topup-preset]").forEach(c=>c.classList.remove("active"));
+        el.classList.add("active");
+      });
+    });
+    $("#topupCustomInput").addEventListener("input", (e)=>{
+      const v = parseInt(e.target.value, 10);
+      if (v > 0) {
+        selectedAmount = v;
+        $("#sheet").querySelectorAll("[data-topup-preset]").forEach(c=>c.classList.remove("active"));
+        updatePreview();
+      }
+    });
+    $("#topupStarsBtn").addEventListener("click", ()=> handleTopUp("stars", selectedAmount));
+    $("#topupCryptoBtn").addEventListener("click", ()=> handleTopUp("crypto", selectedAmount));
+  }
+
+  function updatePreview(){
+    const preview = $("#topupAmountPreview");
+    if (preview) preview.textContent = selectedAmount.toLocaleString('en-US');
+    const box = preview ? preview.closest('.glass') : null;
+    if (box) box.querySelector('span.mono').textContent = ` (≈ ${money(selectedAmount/RATES.STARS)})`;
+  }
+}
+
+async function handleTopUp(method, amountStars){
+  if (!amountStars || amountStars < 50) { toast(t('toast_topup_min')); return; }
+  closeSheet();
+
+  if (method === "stars") {
+    if (isRealPaymentsAvailable()) {
+      try{
+        const tg = window.Telegram.WebApp;
+        toast(t('topup_processing'));
+        const res = await fetch(`${CONFIG.apiBaseUrl}/api/create-topup-invoice`, {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ initData: tg.initData, amountStars }),
+        });
+        if(!res.ok){ const e = await res.json().catch(()=>({})); throw new Error(e.error || `Server error (${res.status})`); }
+        const { invoiceLink } = await res.json();
+        const status = await new Promise(resolve => tg.openInvoice(invoiceLink, resolve));
+        if (status === "paid") {
+          STATE.starsBalance += amountStars;
+          toast(t('toast_topup_confirmed'));
+          render();
+          refreshBalance();
+        } else if (status !== "cancelled") {
+          toast(t('toast_payment_fail'));
+        }
+      }catch(err){
+        console.error("Stars top-up failed:", err);
+        toast(err.message || t('toast_payment_fail'));
+      }
+    } else {
+      // Preview / outside Telegram: simulate so the flow is still testable.
+      toast(t('topup_processing'));
+      await wait(1200);
+      STATE.starsBalance += amountStars;
+      toast(t('toast_topup_confirmed'));
+      render();
+    }
+    return;
+  }
+
+  if (method === "crypto") {
+    const amountUsd = amountStars / RATES.STARS;
+    if (isRealPaymentsAvailable()) {
+      try{
+        const tg = window.Telegram.WebApp;
+        toast(t('topup_processing'));
+        const res = await fetch(`${CONFIG.apiBaseUrl}/api/create-topup-crypto`, {
+          method:"POST", headers:{"Content-Type":"application/json"},
+          body: JSON.stringify({ initData: tg.initData, amountUsd }),
+        });
+        if(!res.ok){ const e = await res.json().catch(()=>({})); throw new Error(e.error || `Server error (${res.status})`); }
+        const { payLink } = await res.json();
+        if (payLink.includes("t.me")) tg.openTelegramLink(payLink);
+        else if (tg.openLink) tg.openLink(payLink);
+        else window.open(payLink, "_blank");
+        toast(t('topup_waiting_crypto'));
+        pollBalanceForTopUp(STATE.starsBalance);
+      }catch(err){
+        console.error("Crypto top-up failed:", err);
+        toast(err.message || t('toast_payment_fail'));
+      }
+    } else {
+      // Preview / outside Telegram: simulate so the flow is still testable.
+      toast(t('topup_processing'));
+      await wait(1400);
+      STATE.starsBalance += amountStars;
+      toast(t('toast_topup_confirmed'));
+      render();
+    }
+  }
+}
+
+// Crypto top-ups are confirmed async via webhook — poll briefly for the
+// balance to change after the user returns from the external Wallet flow.
+async function refreshBalance(){
+  if (!isRealPaymentsAvailable()) return;
+  try{
+    const tg = window.Telegram.WebApp;
+    const res = await fetch(`${CONFIG.apiBaseUrl}/api/balance?initData=${encodeURIComponent(tg.initData)}`);
+    if(res.ok){ const data = await res.json(); STATE.starsBalance = data.balanceStars; render(); }
+  }catch(e){}
+}
+async function fetchReferralData(){
+  if (!isRealPaymentsAvailable()) return;
+  try{
+    const tg = window.Telegram.WebApp;
+    const res = await fetch(`${CONFIG.apiBaseUrl}/api/referral/me?initData=${encodeURIComponent(tg.initData)}`);
+    if(res.ok){
+      const data = await res.json();
+      STATE.referral.code = data.code; STATE.referral.invited = data.invited;
+      STATE.referral.converted = data.converted; STATE.referral.earnedStars = data.earnedStars;
+      render();
+    }
+  }catch(e){}
+}
+// If this launch came from someone's referral link (?startapp=CODE), tell the
+// backend once so it can credit that person when this user makes their first purchase.
+async function registerReferralIfNeeded(){
+  if (!isRealPaymentsAvailable()) return;
+  try{
+    const tg = window.Telegram.WebApp;
+    const startParam = tg.initDataUnsafe && tg.initDataUnsafe.start_param;
+    if (!startParam) return;
+    await fetch(`${CONFIG.apiBaseUrl}/api/referral/register`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ initData: tg.initData, code: startParam }),
+    });
+  }catch(e){}
+}
+async function pollBalanceForTopUp(initialBalance){
+  if (!isRealPaymentsAvailable()) return;
+  const tg = window.Telegram.WebApp;
+  const deadline = Date.now() + 120000;
+  while (Date.now() < deadline) {
+    await wait(4000);
+    try{
+      const res = await fetch(`${CONFIG.apiBaseUrl}/api/balance?initData=${encodeURIComponent(tg.initData)}`);
+      if(res.ok){
+        const data = await res.json();
+        if (data.balanceStars > initialBalance) {
+          STATE.starsBalance = data.balanceStars;
+          toast(t('toast_topup_confirmed'));
+          render();
+          return;
+        }
+      }
+    }catch(e){}
+  }
+}
+
+/* ---------------- admin sheets ---------------- */
+function openEditGameSheet(id){
+  const g = id ? GAMES.find(x=>x.id===id) : null;
+  let pendingImage = g ? (g.imageUrl || null) : null;
+  openSheet(`
+    <h3 style="margin:0 0 16px;">${g?t('edit_game'):t('add_game')}</h3>
+    <div class="field">
+      <label>${t('image_l')}</label>
+      <div id="imgPreviewWrap" tabindex="0" style="width:100%; aspect-ratio:16/9; border-radius:14px; overflow:hidden; margin-bottom:6px; border:1px dashed var(--border-strong); cursor:text; outline:none; ${pendingImage?`background-image:url('${pendingImage.replace(/'/g,"%27")}'); background-size:cover; background-position:center;`:`background:linear-gradient(150deg,hsl(${g?g.hue:220} 70% 22%),hsl(${g?g.hue2:290} 65% 14%)); display:flex; align-items:center; justify-content:center; text-align:center; color:var(--text-faint); font-size:11px; padding:12px;`}">
+        ${pendingImage?'':t('no_image_yet')}
+      </div>
+      <p id="pasteHint" style="font-size:10.5px; color:var(--text-faint); text-align:center; margin:0 0 10px;">${t('image_paste_hint')}</p>
+      <div style="display:flex; gap:8px; align-items:center;">
+        <input id="fImageUrl" placeholder="${t('image_url_ph')}" value="${pendingImage && !pendingImage.startsWith('data:')?pendingImage:''}" style="flex:1;">
+      </div>
+      <div style="display:flex; align-items:center; gap:8px; margin:10px 0;">
+        <div style="flex:1; height:1px; background:var(--border);"></div>
+        <span style="font-size:10.5px; color:var(--text-faint);">${t('image_or')}</span>
+        <div style="flex:1; height:1px; background:var(--border);"></div>
+      </div>
+      <label class="btn btn-ghost btn-sm" style="width:100%; cursor:pointer;">
+        ${t('image_upload_btn')}
+        <input id="fImageFile" type="file" accept="image/*" style="display:none;">
+      </label>
+    </div>
+    <div class="field"><label>${t('title_l')}</label><input id="fTitle" value="${g?g.title:''}"></div>
+    <div class="field"><label>${t('genre_l')}</label>
+      <select id="fGenre">${GENRES.map(gn=>`<option value="${gn}" ${g&&g.genre===gn?'selected':''}>${trGenre(gn)}</option>`).join("")}</select>
+    </div>
+    <div class="field"><label>${t('price_usd_l')}</label><input id="fPrice" type="number" step="0.01" value="${g?g.price:'1.49'}"></div>
+    <div class="field"><label>${t('desc_l')}</label><textarea id="fDesc">${g?g.desc:''}</textarea></div>
+    <button class="btn btn-primary" id="saveGameBtn">${g?t('save_changes'):t('add_game')}</button>
+  `);
+
+  function updatePreview(url){
+    const wrap = $("#imgPreviewWrap");
+    if (url) {
+      wrap.style.backgroundImage = `url('${url.replace(/'/g,"%27")}')`;
+      wrap.style.backgroundSize = "cover";
+      wrap.style.backgroundPosition = "center";
+      wrap.style.display = "block";
+      wrap.textContent = "";
+    } else {
+      wrap.style.backgroundImage = "none";
+      wrap.style.display = "flex";
+      wrap.textContent = t('no_image_yet');
+    }
+  }
+
+  function setImageFromFile(file){
+    if (!file || !file.type || !file.type.startsWith("image/")) return;
+    compressImageFile(file, 900, 0.78).then(dataUrl=>{
+      pendingImage = dataUrl;
+      $("#fImageUrl").value = "";
+      updatePreview(pendingImage);
+      toast(t('toast_image_pasted'));
+    }).catch(()=>{
+      toast(t('toast_payment_fail'));
+    });
+  }
+
+  // Resizes to a max dimension and re-encodes as JPEG so a full-resolution
+  // phone photo (often several MB) never gets sent to the server as-is —
+  // that was crashing the backend (ran out of memory on the free tier).
+  // Result is typically well under 200KB even for a large original photo.
+  function compressImageFile(file, maxDimension, quality){
+    return new Promise((resolve, reject)=>{
+      const reader = new FileReader();
+      reader.onload = ()=>{
+        const img = new Image();
+        img.onload = ()=>{
+          let { width, height } = img;
+          if (width > height && width > maxDimension) { height = Math.round(height*(maxDimension/width)); width = maxDimension; }
+          else if (height > maxDimension) { width = Math.round(width*(maxDimension/height)); height = maxDimension; }
+          const canvas = document.createElement("canvas");
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL("image/jpeg", quality));
+        };
+        img.onerror = reject;
+        img.src = reader.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function handlePaste(e){
+    const items = (e.clipboardData || window.clipboardData || {}).items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type && item.type.startsWith("image/")) {
+        e.preventDefault();
+        setImageFromFile(item.getAsFile());
+        return;
+      }
+    }
+  }
+
+  // Click the preview box, then press Ctrl+V (or long-press → Paste on mobile)
+  // to drop a copied image straight in — no save-to-disk step needed.
+  $("#imgPreviewWrap").addEventListener("click", ()=> $("#imgPreviewWrap").focus());
+  $("#imgPreviewWrap").addEventListener("paste", handlePaste);
+  $("#fImageUrl").addEventListener("paste", handlePaste);
+
+  $("#fImageUrl").addEventListener("input", (e)=>{
+    pendingImage = e.target.value.trim() || null;
+    updatePreview(pendingImage);
+  });
+  $("#fImageFile").addEventListener("change", (e)=>{
+    setImageFromFile(e.target.files[0]);
+  });
+
+  $("#saveGameBtn").addEventListener("click", async ()=>{
+    const title = $("#fTitle").value.trim();
+    const genre = $("#fGenre").value;
+    const price = parseFloat($("#fPrice").value)||0.99;
+    const desc = $("#fDesc").value.trim();
+    if(!title){ toast(t('toast_title_required')); return; }
+
+    const btn = $("#saveGameBtn");
+    btn.disabled = true;
+
+    if (isBackendConfigured()) {
+      try{
+        if (g) {
+          const { game: updated } = await adminApiCall("PUT", `/api/admin/games/${g.id}`, { title, genre, priceUsd:price, desc, imageUrl:pendingImage });
+          g.title=updated.title; g.genre=updated.genre; g.price=updated.priceUsd; g.desc=updated.desc; g.imageUrl=updated.imageUrl;
+          toast(t('toast_game_updated'));
+        } else {
+          const { game: created } = await adminApiCall("POST", "/api/admin/games", { title, genre, priceUsd:price, desc, imageUrl:pendingImage });
+          GAMES.push({ id:created.id, title:created.title, genre:created.genre, price:created.priceUsd, orig:null, discountPct:0, desc:created.desc, rating:created.rating, isNew:true, isHot:false, hue:Math.floor(rnd()*360), hue2:Math.floor(rnd()*360), sold:0, imageUrl:created.imageUrl });
+          toast(t('toast_game_added'));
+        }
+        closeSheet(); render();
+      }catch(err){
+        toast(err.message || t('toast_payment_fail'));
+        btn.disabled = false;
+      }
+      return;
+    }
+
+    // Preview / backend not configured: local-only, same as before.
+    if (g) { g.title=title; g.genre=genre; g.price=price; g.desc=desc; g.imageUrl=pendingImage; toast(t('toast_game_updated')); }
+    else {
+      GAMES.push({ id:"g"+(GAMES.length+1)+"_"+Date.now(), title, genre, price, orig:null, discountPct:0, desc, rating:4.5, isNew:true, isHot:false, hue:Math.floor(rnd()*360), hue2:Math.floor(rnd()*360), sold:0, imageUrl:pendingImage });
+      toast(t('toast_game_added'));
+    }
+    closeSheet(); render();
+  });
+}
+
+/* ============================= BOOT ============================= */
+STATE.user = auth.telegramLogin();
+render();
+refreshBalance(); // no-op in preview/demo mode; pulls the real balance when backend is live
+syncCatalogFromBackend(); // pulls admin-edited catalog (titles/prices/images) when backend is live
+registerReferralIfNeeded();
+fetchReferralData();
+if (STATE.theme === "light") document.body.classList.add("light-theme");
+</script>
+</body>
+</html>
